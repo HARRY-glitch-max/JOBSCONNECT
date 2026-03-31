@@ -3,68 +3,96 @@ import User from "../models/Jobseeker.js";
 import Employer from "../models/Employer.js";
 import Admin from "../models/Admin.js";
 
+/**
+ * 🛡️ Global Protection Middleware
+ * Verifies JWT and attaches the correct user object + role to the request.
+ */
 export const protect = async (req, res, next) => {
-  if (!req.headers.authorization?.startsWith("Bearer")) {
-    return res.status(401).json({ message: "Not authorized, no token" });
-  }
+  let token;
 
-  try {
-    const token = req.headers.authorization.split(" ")[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+  // Check for Bearer token in headers
+  if (req.headers.authorization?.startsWith("Bearer")) {
+    try {
+      token = req.headers.authorization.split(" ")[1];
 
-    let account;
+      // 1. Verify Token
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // 🔥 Admins
-    if (decoded.role === "admin") {
-      account = await Admin.findById(decoded.id).select("-password");
-      if (!account) {
-        return res.status(401).json({ message: "Admin not found" });
+      // 2. Optimized Account Fetching based on Decoded Role
+      let account = null;
+      const userRole = decoded.role?.toLowerCase();
+
+      if (userRole === "admin") {
+        account = await Admin.findById(decoded.id).select("-password").lean();
+      } else if (userRole === "employer") {
+        account = await Employer.findById(decoded.id).select("-password").lean();
+      } else if (userRole === "jobseeker") {
+        account = await User.findById(decoded.id).select("-password").lean();
+      } else {
+        // Fallback: If role is missing in token, check both (Safety Net)
+        const [foundUser, foundEmployer] = await Promise.all([
+          User.findById(decoded.id).select("-password").lean(),
+          Employer.findById(decoded.id).select("-password").lean(),
+        ]);
+        account = foundUser || foundEmployer;
       }
-      req.user = account;
-      req.user.accountType = "admin";
-      req.user.employerId = account.employerId;
-      return next();
+
+      if (!account) {
+        return res.status(401).json({ message: "Account not found or session invalid." });
+      }
+
+      // 3. Attach User and Role to Request Object
+      // This allows 'req.user' to be used in controllers (like chatController)
+      req.user = {
+        ...account,
+        role: userRole || (account.companyName ? "employer" : "jobseeker"),
+      };
+
+      next();
+    } catch (error) {
+      console.error("JWT Verification Error:", error.message);
+      
+      const errorMessage = error.name === "TokenExpiredError" 
+        ? "Session expired, please login again." 
+        : "Not authorized, token failed.";
+        
+      return res.status(401).json({ message: errorMessage });
     }
-
-    // 🔄 Jobseekers or Employers
-    const [user, employer] = await Promise.all([
-      User.findById(decoded.id).select("-password"),
-      Employer.findById(decoded.id).select("-password"),
-    ]);
-
-    account = user || employer;
-    if (!account) {
-      return res.status(401).json({ message: "Not authorized, account not found" });
-    }
-
-    req.user = account;
-    if (employer) {
-      req.user.accountType = "employer";
-      req.user.employerId = employer._id;
-    } else {
-      req.user.accountType = "user";
-    }
-
-    next();
-  } catch (error) {
-    return res.status(401).json({ message: "Not authorized, token failed" });
+  } else {
+    return res.status(401).json({ message: "Not authorized, no token provided." });
   }
 };
 
-// =======================
-// Role Middlewares
-// =======================
+// ==========================================
+// 🔒 Granular Role Protection Middlewares
+// ==========================================
 
+/**
+ * Restricts access to Admin users only
+ */
 export const adminProtect = (req, res, next) => {
-  if (req.user?.accountType === "admin") {
+  if (req.user && req.user.role === "admin") {
     return next();
   }
-  return res.status(403).json({ message: "Access denied, admins only" });
+  return res.status(403).json({ message: "Access denied: Admins only." });
 };
 
+/**
+ * Restricts access to Employer users only
+ */
 export const employerProtect = (req, res, next) => {
-  if (req.user?.accountType === "employer") {
+  if (req.user && req.user.role === "employer") {
     return next();
   }
-  return res.status(403).json({ message: "Access denied, employers only" });
+  return res.status(403).json({ message: "Access denied: Employers only." });
+};
+
+/**
+ * Restricts access to Jobseekers only
+ */
+export const jobseekerProtect = (req, res, next) => {
+  if (req.user && req.user.role === "jobseeker") {
+    return next();
+  }
+  return res.status(403).json({ message: "Access denied: Jobseekers only." });
 };

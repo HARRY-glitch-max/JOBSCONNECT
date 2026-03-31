@@ -6,8 +6,8 @@ import mongoose from "mongoose";
 
 /**
  * 🛡️ Security Helper
- * Verifies that a Jobseeker and Employer have a formal connection 
- * via an application before allowing communication.
+ * Verifies that a connection exists and returns the application 
+ * to confirm who is who.
  */
 const checkApplicationExists = async (id1, id2) => {
   return await Application.findOne({
@@ -27,19 +27,24 @@ export const sendMessage = async (req, res) => {
       return res.status(400).json({ message: "Message content cannot be empty." });
     }
 
-    // Authorization: Only allow messaging if an application exists
+    // 1. Authorization Check
     const hasConnection = await checkApplicationExists(senderId, receiverId);
     if (!hasConnection) {
       return res.status(403).json({ 
-        message: "Access Denied: You can only message after an application has been submitted." 
+        message: "Access Denied: Connection only allowed after an application is submitted." 
       });
     }
 
-    // Dynamically determine models based on sender role
-    const IsJobSeeker = senderType === "JobSeeker";
-    const SenderModel = IsJobSeeker ? JobSeeker : Employer;
-    const ReceiverModel = IsJobSeeker ? Employer : JobSeeker;
+    // 2. Determine Logic based on senderType (Case Insensitive)
+    const isJobSeekerSender = senderType?.toLowerCase() === "jobseeker";
+    
+    const senderModelName = isJobSeekerSender ? "Jobseeker" : "Employer";
+    const receiverModelName = isJobSeekerSender ? "Employer" : "Jobseeker";
 
+    const SenderModel = isJobSeekerSender ? JobSeeker : Employer;
+    const ReceiverModel = isJobSeekerSender ? Employer : JobSeeker;
+
+    // 3. Fetch Profile details for the Chat Document
     const [sender, receiver] = await Promise.all([
       SenderModel.findById(senderId).select("name companyName avatar").lean(),
       ReceiverModel.findById(receiverId).select("name companyName avatar").lean()
@@ -49,13 +54,18 @@ export const sendMessage = async (req, res) => {
       return res.status(404).json({ message: "Sender or Receiver profile not found." });
     }
 
+    // 4. Create Chat with Dynamic Ref fields
     const newChat = new Chat({
       senderId,
-      senderName: sender.companyName || sender.name || "Unknown User",
+      senderModel: senderModelName, // ✅ Required for Dynamic Ref
+      senderName: sender.companyName || sender.name || "Unknown",
       senderAvatar: sender.avatar || null,
+      
       receiverId,
-      receiverName: receiver.companyName || receiver.name || "Unknown User",
+      receiverModel: receiverModelName, // ✅ Required for Dynamic Ref
+      receiverName: receiver.companyName || receiver.name || "Unknown",
       receiverAvatar: receiver.avatar || null,
+      
       message: message.trim(),
     });
 
@@ -67,11 +77,12 @@ export const sendMessage = async (req, res) => {
   }
 };
 
-// --- 2. Get Chat History (One-on-One) ---
+// --- 2. Get Chat History ---
 export const getChatHistory = async (req, res) => {
   try {
     const { senderId, receiverId } = req.params;
 
+    // Verification
     const hasConnection = await checkApplicationExists(senderId, receiverId);
     if (!hasConnection) {
       return res.status(403).json({ message: "Authorization failed: No active application found." });
@@ -88,11 +99,12 @@ export const getChatHistory = async (req, res) => {
 
     res.status(200).json(chats);
   } catch (error) {
+    console.error("Fetch History Error:", error);
     res.status(500).json({ message: "Error retrieving chat history." });
   }
 };
 
-// --- 3. Get Inbox (Sidebar Conversation List) ---
+// --- 3. Get Inbox (Aggregate Sidebar) ---
 export const getUserChats = async (req, res) => {
   try {
     const { userId } = req.params;
@@ -112,6 +124,7 @@ export const getUserChats = async (req, res) => {
       { $sort: { createdAt: -1 } },
       {
         $group: {
+          // Grouping by unique pair of IDs
           _id: {
             $cond: [
               { $gt: ["$senderId", "$receiverId"] },

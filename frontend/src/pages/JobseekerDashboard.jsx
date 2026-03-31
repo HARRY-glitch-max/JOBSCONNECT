@@ -1,12 +1,12 @@
 import { Routes, Route, NavLink, useNavigate } from "react-router-dom";
 import { useContext, useState, useEffect, useCallback } from "react"; 
-import axios from "axios"; 
+// ✅ Use your custom apiClient instead of raw axios
+import apiClient from "../api/client"; 
 
 // Sub-Pages
 import Jobs from "./Jobs";
 import MyApplications from "./MyApplications";
 import ChatPage from "./ChatPage"; 
-// ✅ Corrected Path based on your file structure (src/components/chat/)
 import ChatSidebar from "../components/chat/ChatSidebar"; 
 import JobseekerProfile from "./JobseekerProfile";
 import JobseekerNotifications from "./JobseekerNotifications";
@@ -57,49 +57,53 @@ export default function JobseekerDashboard() {
   const [interviewCount, setInterviewCount] = useState(0);
   const [messageCount, setMessageCount] = useState(0); 
 
-  const token = localStorage.getItem("token");
+  // --- API Fetchers using apiClient (Interceptors handle the Token) ---
 
   const fetchUnreadCount = useCallback(async () => {
+    if (!user?._id) return;
     try {
-      if (!user?._id) return;
-      const { data } = await axios.get(`/api/notifications/user/${user._id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setUnreadCount(data.filter(n => !n.isRead).length);
-    } catch (err) { console.error("Unread fetch error", err); }
-  }, [user?._id, token]);
+      const { data } = await apiClient.get(`/notifications/user/${user._id}`);
+      setUnreadCount(Array.isArray(data) ? data.filter(n => !n.isRead).length : 0);
+    } catch (err) { 
+      console.error("Unread fetch error:", err.response?.data?.message || err.message); 
+    }
+  }, [user?._id]);
 
   const fetchInterviewCount = useCallback(async () => {
+    if (!user?._id) return;
     try {
-      if (!user?._id) return;
-      const { data } = await axios.get(`/api/interviews/user/${user._id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const { data } = await apiClient.get(`/interviews/user/${user._id}`);
       setInterviewCount(Array.isArray(data) ? data.length : 0);
-    } catch (err) { console.error("Interview count fetch error", err); }
-  }, [user?._id, token]);
+    } catch (err) { 
+      console.error("Interview fetch error:", err.response?.data?.message || err.message); 
+    }
+  }, [user?._id]);
 
   const fetchMessageCount = useCallback(async () => {
+    if (!user?._id) return;
     try {
-      if (!user?._id) return;
-      const { data } = await axios.get(`/api/chats/user/${user._id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setMessageCount(data.length); 
-    } catch (err) { console.error("Message count fetch error", err); }
-  }, [user?._id, token]);
+      const { data } = await apiClient.get(`/chats/user/${user._id}`);
+      setMessageCount(Array.isArray(data) ? data.length : 0); 
+    } catch (err) { 
+      console.error("Message fetch error:", err.response?.data?.message || err.message); 
+    }
+  }, [user?._id]);
 
+  // Handle initial load and polling
   useEffect(() => {
-    fetchUnreadCount();
-    fetchInterviewCount();
-    fetchMessageCount();
-    const interval = setInterval(() => {
-        fetchUnreadCount();
-        fetchInterviewCount();
-        fetchMessageCount();
-    }, 30000); 
-    return () => clearInterval(interval);
-  }, [fetchUnreadCount, fetchInterviewCount, fetchMessageCount]);
+    if (user?._id) {
+      fetchUnreadCount();
+      fetchInterviewCount();
+      fetchMessageCount();
+
+      const interval = setInterval(() => {
+          fetchUnreadCount();
+          fetchInterviewCount();
+          fetchMessageCount();
+      }, 30000); 
+      return () => clearInterval(interval);
+    }
+  }, [user?._id, fetchUnreadCount, fetchInterviewCount, fetchMessageCount]);
 
   return (
     <div className="flex min-h-screen bg-slate-50 font-sans antialiased overflow-hidden">
@@ -189,13 +193,11 @@ export default function JobseekerDashboard() {
               </div>
           </div>
 
-          {/* Sub-Router for Dynamic Content */}
           <section className="bg-white rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100 min-h-[700px] flex flex-col overflow-hidden">
             <Routes>
               <Route path="jobs" element={<div className="p-10"><Jobs /></div>} />
               <Route path="applications" element={<div className="p-10"><MyApplications /></div>} />
               
-              {/* ✅ Split-View Messaging Integration */}
               <Route path="messages/*" element={
                 <div className="flex h-[700px]">
                   <ChatSidebar />

@@ -33,11 +33,12 @@ const AppContent = () => {
   const { loading, user, role } = useContext(AuthContext);
   const location = useLocation();
 
+  // Debugging navigation
   useEffect(() => {
     console.log("📍 Navigation Change:", location.pathname);
   }, [location]);
 
-  // Updated logic to ensure Navbar hides correctly on the Apply screen
+  // Logic to hide general Navbar when inside any dashboard or application flow
   const hideNavbar =
     location.pathname.startsWith("/employer/dashboard") ||
     location.pathname.startsWith("/admin/dashboard") ||
@@ -64,7 +65,7 @@ const AppContent = () => {
           <Route path="/" element={<Home />} />
           <Route path="/jobs" element={<Jobs />} />
 
-          {/* 2. APPLICATION ROUTE (Placed high for priority) */}
+          {/* 2. APPLICATION ROUTE */}
           <Route 
             path="/apply/:jobId" 
             element={
@@ -88,7 +89,7 @@ const AppContent = () => {
             element={!isAuthenticated ? <AdminLogin /> : <Navigate to="/admin/dashboard" replace />}
           />
 
-          {/* 4. PROTECTED DASHBOARDS */}
+          {/* 4. PROTECTED DASHBOARDS (Wildcard /* allows nested routes inside these components) */}
           <Route
             path="/jobseeker/dashboard/*"
             element={isAuthenticated && role?.toLowerCase() === "jobseeker" ? <JobseekerDashboard /> : <Navigate to="/jobseeker/login" replace />}
@@ -102,11 +103,11 @@ const AppContent = () => {
             element={isAuthenticated && role?.toLowerCase() === "admin" ? <AdminDashboard /> : <Navigate to="/admin/login" replace />}
           />
 
-          {/* 5. SHARED ROUTES */}
+          {/* 5. GLOBAL FALLBACK ROUTES (Shared standalone chat) */}
           <Route path="/chat" element={isAuthenticated ? <ChatPage /> : <Navigate to="/" replace />} />
           <Route path="/chat/:receiverId" element={isAuthenticated ? <ChatPage /> : <Navigate to="/" replace />} />
 
-          {/* 6. FALLBACK (Keep this last) */}
+          {/* 6. FALLBACK */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

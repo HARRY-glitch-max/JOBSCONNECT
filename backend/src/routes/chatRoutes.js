@@ -1,4 +1,3 @@
-// routes/chatRoutes.js
 import express from "express";
 import {
   sendMessage,
@@ -10,10 +9,10 @@ const router = express.Router();
 
 /**
  * ✅ Send a new message
- * POST /api/chats
- * Body: { senderId, receiverId, message }
+ * POST /api/chats/send
+ * Body: { senderId, receiverId, message, senderType }
  */
-router.post("/", sendMessage);
+router.post("/send", sendMessage);
 
 /**
  * ✅ Get chat history between two users
@@ -22,7 +21,7 @@ router.post("/", sendMessage);
 router.get("/history/:senderId/:receiverId", getChatHistory);
 
 /**
- * ✅ Get all chats for a user (inbox style)
+ * ✅ Get all unique conversations for a user (Inbox/Sidebar)
  * GET /api/chats/user/:userId
  */
 router.get("/user/:userId", getUserChats);

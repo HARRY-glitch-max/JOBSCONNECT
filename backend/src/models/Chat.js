@@ -2,60 +2,69 @@ import mongoose from "mongoose";
 
 const chatSchema = new mongoose.Schema(
   {
-    // ✅ Sender details
+    // ✅ SENDER LOGIC
     senderId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Jobseeker", // updated from "User"
       required: true,
+      refPath: "senderModel", // Tells Mongoose to look at senderModel field
+    },
+    senderModel: {
+      type: String,
+      required: true,
+      enum: ["Jobseeker", "Employer"], // Must match your Model names exactly
     },
     senderName: {
       type: String,
       required: true,
     },
     senderAvatar: {
-      type: String, // optional profile picture
+      type: String,
       default: null,
     },
 
-    // ✅ Receiver details
+    // ✅ RECEIVER LOGIC
     receiverId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Jobseeker", // updated from "User"
       required: true,
+      refPath: "receiverModel", // Tells Mongoose to look at receiverModel field
+    },
+    receiverModel: {
+      type: String,
+      required: true,
+      enum: ["Jobseeker", "Employer"],
     },
     receiverName: {
       type: String,
       required: true,
     },
     receiverAvatar: {
-      type: String, // optional profile picture
+      type: String,
       default: null,
     },
 
-    // ✅ Message content
+    // ✅ MESSAGE CONTENT
     message: {
       type: String,
       required: true,
-      trim: true, // ensures no accidental whitespace
+      trim: true,
     },
 
-    // ✅ Read status
+    // ✅ STATUS & TIMING
     isRead: {
       type: Boolean,
       default: false,
     },
-
-    // ✅ Timestamp
-    timestamp: {
-      type: Date,
-      default: Date.now,
-    },
   },
-  { timestamps: true }
+  { 
+    timestamps: true, // This automatically creates 'createdAt' and 'updatedAt'
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true }
+  }
 );
 
-// ✅ Index for faster queries on conversations
-chatSchema.index({ senderId: 1, receiverId: 1, timestamp: 1 });
+// ✅ Performance Optimization
+// Indexing helps speed up the "Inbox" and "History" queries significantly
+chatSchema.index({ senderId: 1, receiverId: 1, createdAt: -1 });
 
 const Chat = mongoose.model("Chat", chatSchema);
 

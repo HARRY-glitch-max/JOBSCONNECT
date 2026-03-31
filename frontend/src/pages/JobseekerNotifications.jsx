@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useContext, useCallback } from "react";
-import axios from "axios";
+// ✅ 1. Use your central apiClient instead of raw axios
+import apiClient from "../api/client"; 
 import { AuthContext } from "../contexts/AuthContext";
 import { Bell, CheckCheck, Calendar, Info, Loader2, AlertCircle } from "lucide-react";
 import { formatDistanceToNow, isValid } from "date-fns";
@@ -11,35 +12,26 @@ const JobseekerNotifications = ({ refreshBadge }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // ✅ 1. Reusable Headers with Cache-Busting
-  const getAuthHeaders = useCallback(() => ({
-    headers: { 
-      Authorization: `Bearer ${localStorage.getItem("token")}`,
-      "Cache-Control": "no-cache", // Forces fresh data
-      "Pragma": "no-cache",
-      "Expires": "0",
-    }
-  }), []);
-
-  // ✅ 2. Wrapped in useCallback to prevent infinite re-renders
+  // ✅ 2. fetchNotifications simplified to use the interceptor
   const fetchNotifications = useCallback(async () => {
     if (!user?._id) return;
     
     try {
       setError(null);
-      const { data } = await axios.get(
-        `/api/notifications/user/${user._id}?t=${Date.now()}`, // Added timestamp query to bypass 304 cache
-        getAuthHeaders()
-      );
+      // No need for manual headers or timestamp hacks; apiClient handles it
+      const { data } = await apiClient.get(`/notifications/user/${user._id}`);
       
       setNotifications(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("Fetch Error:", err.response || err);
-      setError("Failed to sync notifications. Please check your connection.");
+      // Only show error UI if it's not a 401 (interceptor handles logouts)
+      if (err.response?.status !== 401) {
+        setError("Failed to sync notifications. Please check your connection.");
+      }
     } finally {
       setLoading(false);
     }
-  }, [user?._id, getAuthHeaders]);
+  }, [user?._id]);
 
   useEffect(() => {
     fetchNotifications();
@@ -47,7 +39,8 @@ const JobseekerNotifications = ({ refreshBadge }) => {
 
   const markAsRead = async (id) => {
     try {
-      await axios.put(`/api/notifications/${id}/read`, {}, getAuthHeaders());
+      // ✅ Use apiClient
+      await apiClient.put(`/notifications/${id}/read`);
       setNotifications(prev => prev.map(n => n._id === id ? { ...n, isRead: true } : n));
       if (refreshBadge) refreshBadge();
     } catch (err) {
@@ -57,7 +50,8 @@ const JobseekerNotifications = ({ refreshBadge }) => {
 
   const markAllRead = async () => {
     try {
-      await axios.put(`/api/notifications/user/${user._id}/read-all`, {}, getAuthHeaders());
+      // ✅ Use apiClient
+      await apiClient.put(`/notifications/user/${user._id}/read-all`);
       setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
       if (refreshBadge) refreshBadge();
     } catch (err) {
@@ -112,7 +106,7 @@ const JobseekerNotifications = ({ refreshBadge }) => {
         {notifications.length === 0 ? (
           <div className="bg-white border-2 border-dashed border-slate-200 p-16 rounded-3xl text-center">
             <div className="bg-slate-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
-               <Info className="text-slate-300" size={40} />
+                <Info className="text-slate-300" size={40} />
             </div>
             <h3 className="text-xl font-bold text-slate-800">No notifications yet</h3>
             <p className="text-slate-500 mt-1">When an employer updates your status, it'll appear here.</p>

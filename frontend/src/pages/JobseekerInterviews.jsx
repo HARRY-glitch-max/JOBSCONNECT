@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useContext, useCallback } from "react";
-import axios from "axios";
+// ✅ 1. Import your central apiClient
+import apiClient from "../api/client"; 
 import { AuthContext } from "../contexts/AuthContext";
 import { 
   Calendar, 
@@ -20,16 +21,7 @@ const JobseekerInterviews = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // ✅ 1. Stable Header Helper with Cache-Busting
-  const getAuthHeaders = useCallback(() => ({
-    headers: { 
-      Authorization: `Bearer ${localStorage.getItem("token")}`,
-      "Cache-Control": "no-cache",
-      "Pragma": "no-cache",
-      "Expires": "0",
-    }
-  }), []);
-
+  // ✅ 2. fetchInterviews simplified using apiClient
   const fetchInterviews = useCallback(async () => {
     if (!user?._id) return;
     
@@ -37,20 +29,21 @@ const JobseekerInterviews = () => {
       setLoading(true);
       setError(null);
       
-      // ✅ 2. Added Cache-Busting Timestamp (?t=...)
-      const { data } = await axios.get(
-        `/api/interviews/user/${user._id}?t=${Date.now()}`, 
-        getAuthHeaders()
-      );
+      // ✅ apiClient automatically attaches the Bearer token from 'jobConnectUser'
+      // and handles 401 logouts globally.
+      const { data } = await apiClient.get(`/interviews/user/${user._id}`);
 
       setInterviews(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("Interview Fetch Error:", err.response || err);
-      setError("Unable to sync your interview schedule. Please check your connection.");
+      // Only set error if it's not a 401 (since 401 is handled by the interceptor)
+      if (err.response?.status !== 401) {
+        setError("Unable to sync your interview schedule. Please check your connection.");
+      }
     } finally {
       setLoading(false);
     }
-  }, [user?._id, getAuthHeaders]);
+  }, [user?._id]);
 
   useEffect(() => {
     fetchInterviews();
