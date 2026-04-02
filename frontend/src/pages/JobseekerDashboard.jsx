@@ -1,13 +1,12 @@
 import { Routes, Route, NavLink, useNavigate } from "react-router-dom";
 import { useContext, useState, useEffect, useCallback } from "react"; 
-// ✅ Use your custom apiClient instead of raw axios
 import apiClient from "../api/client"; 
 
 // Sub-Pages
 import Jobs from "./Jobs";
 import MyApplications from "./MyApplications";
-import ChatPage from "./ChatPage"; 
-import ChatSidebar from "../components/chat/ChatSidebar"; 
+// ✅ Import the unified Messages component
+import Messages from "./Messages"; 
 import JobseekerProfile from "./JobseekerProfile";
 import JobseekerNotifications from "./JobseekerNotifications";
 import JobseekerInterviews from "./JobseekerInterviews";
@@ -57,15 +56,13 @@ export default function JobseekerDashboard() {
   const [interviewCount, setInterviewCount] = useState(0);
   const [messageCount, setMessageCount] = useState(0); 
 
-  // --- API Fetchers using apiClient (Interceptors handle the Token) ---
-
   const fetchUnreadCount = useCallback(async () => {
     if (!user?._id) return;
     try {
       const { data } = await apiClient.get(`/notifications/user/${user._id}`);
       setUnreadCount(Array.isArray(data) ? data.filter(n => !n.isRead).length : 0);
     } catch (err) { 
-      console.error("Unread fetch error:", err.response?.data?.message || err.message); 
+      console.error("Unread fetch error:", err.message); 
     }
   }, [user?._id]);
 
@@ -75,7 +72,7 @@ export default function JobseekerDashboard() {
       const { data } = await apiClient.get(`/interviews/user/${user._id}`);
       setInterviewCount(Array.isArray(data) ? data.length : 0);
     } catch (err) { 
-      console.error("Interview fetch error:", err.response?.data?.message || err.message); 
+      console.error("Interview fetch error:", err.message); 
     }
   }, [user?._id]);
 
@@ -85,11 +82,10 @@ export default function JobseekerDashboard() {
       const { data } = await apiClient.get(`/chats/user/${user._id}`);
       setMessageCount(Array.isArray(data) ? data.length : 0); 
     } catch (err) { 
-      console.error("Message fetch error:", err.response?.data?.message || err.message); 
+      console.error("Message fetch error:", err.message); 
     }
   }, [user?._id]);
 
-  // Handle initial load and polling
   useEffect(() => {
     if (user?._id) {
       fetchUnreadCount();
@@ -120,6 +116,7 @@ export default function JobseekerDashboard() {
             <NavItem to="applications" label="My Applications" icon={FileText} />
             <NavItem to="interviews" label="Interviews" icon={Calendar} badgeCount={interviewCount} />
             <NavItem to="notifications" label="Notifications" icon={Bell} badgeCount={unreadCount} />
+            {/* ✅ Updated Link to matches nested route */}
             <NavItem to="messages" label="Messages" icon={Mail} badgeCount={messageCount} />
             <NavItem to="profile" label="Profile" icon={User} />
           </ul>
@@ -155,7 +152,7 @@ export default function JobseekerDashboard() {
                 Welcome, {user?.name?.split(' ')[0] || 'User'}! 👋
               </h1>
               <p className="text-slate-500 mt-1 text-lg font-medium">
-                You have <span className="text-blue-600 font-bold">{unreadCount}</span> new notifications to review.
+                You have <span className="text-blue-600 font-bold">{unreadCount}</span> new notifications.
               </p>
             </div>
             
@@ -198,17 +195,8 @@ export default function JobseekerDashboard() {
               <Route path="jobs" element={<div className="p-10"><Jobs /></div>} />
               <Route path="applications" element={<div className="p-10"><MyApplications /></div>} />
               
-              <Route path="messages/*" element={
-                <div className="flex h-[700px]">
-                  <ChatSidebar />
-                  <div className="flex-1 border-l border-slate-100 overflow-hidden">
-                    <Routes>
-                      <Route index element={<ChatPage />} />
-                      <Route path=":receiverId" element={<ChatPage />} />
-                    </Routes>
-                  </div>
-                </div>
-              } />
+              {/* ✅ CLEANED MESSAGES ROUTE: Uses the unified Messages.jsx */}
+              <Route path="messages" element={<Messages />} />
               
               <Route path="profile" element={<div className="p-10"><JobseekerProfile /></div>} />
               <Route path="notifications" element={<div className="p-10"><JobseekerNotifications refreshBadge={fetchUnreadCount} /></div>} />
@@ -221,7 +209,7 @@ export default function JobseekerDashboard() {
                    </div>
                    <h3 className="text-3xl font-black text-slate-900">Your Hub</h3>
                    <p className="text-slate-500 mt-3 mb-10 text-lg max-w-md mx-auto leading-relaxed">
-                     Track applications, manage interviews, and chat with employers all in one place.
+                     Track applications, manage interviews, and chat with employers in one place.
                    </p>
                    <Button onClick={() => navigate("jobs")} className="bg-blue-600 text-white px-12 py-4 rounded-2xl font-black shadow-lg shadow-blue-200 hover:scale-105 active:scale-95 transition-all">
                      Explore Opportunities
