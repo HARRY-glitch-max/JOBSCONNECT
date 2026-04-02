@@ -10,7 +10,6 @@ import Admin from "../models/Admin.js";
 export const protect = async (req, res, next) => {
   let token;
 
-  // Check for Bearer token in headers
   if (req.headers.authorization?.startsWith("Bearer")) {
     try {
       token = req.headers.authorization.split(" ")[1];
@@ -29,7 +28,7 @@ export const protect = async (req, res, next) => {
       } else if (userRole === "jobseeker") {
         account = await User.findById(decoded.id).select("-password").lean();
       } else {
-        // Fallback: If role is missing in token, check both (Safety Net)
+        // Fallback: If role is missing in token, check all (Safety Net)
         const [foundUser, foundEmployer] = await Promise.all([
           User.findById(decoded.id).select("-password").lean(),
           Employer.findById(decoded.id).select("-password").lean(),
@@ -41,11 +40,14 @@ export const protect = async (req, res, next) => {
         return res.status(401).json({ message: "Account not found or session invalid." });
       }
 
-      // 3. Attach User and Role to Request Object
-      // This allows 'req.user' to be used in controllers (like chatController)
+      // 3. Attach User, Role, and critical IDs to Request Object
+      // ✅ FIX: Explicitly mapping properties to ensure 'lean' objects work with controllers
       req.user = {
         ...account,
+        _id: account._id.toString(),
         role: userRole || (account.companyName ? "employer" : "jobseeker"),
+        // ✅ CRITICAL: Ensure employerId is passed for the reports controller
+        employerId: account.employerId ? account.employerId.toString() : decoded.employerId,
       };
 
       next();

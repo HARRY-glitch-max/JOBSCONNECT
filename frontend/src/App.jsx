@@ -20,14 +20,17 @@ import ChatPage from "./pages/ChatPage";
 // Jobseeker
 import JobseekerLogin from "./pages/JobseekerLogin";
 import JobseekerDashboard from "./pages/JobseekerDashboard";
+import JobseekerRegister from "./pages/JobseekerRegister"; // ✅ Added
 
 // Employer
 import EmployerLogin from "./pages/EmployerLogin";
 import EmployerDashboard from "./pages/EmployerDashboard";
+import EmployerRegister from "./pages/EmployerRegister"; // ✅ Added
 
 // Admin
 import AdminLogin from "./pages/AdminLogin";
 import AdminDashboard from "./pages/AdminDashboard";
+import AdminRegister from "./pages/AdminRegister"; // ✅ Added
 
 const AppContent = () => {
   const { loading, user, role } = useContext(AuthContext);
@@ -65,7 +68,12 @@ const AppContent = () => {
           <Route path="/" element={<Home />} />
           <Route path="/jobs" element={<Jobs />} />
 
-          {/* 2. APPLICATION ROUTE */}
+          {/* 2. REGISTRATION ROUTES (Fixed your issue) */}
+          <Route path="/jobseeker/register" element={<JobseekerRegister />} />
+          <Route path="/employer/register" element={<EmployerRegister />} />
+          <Route path="/admin/register" element={<AdminRegister />} />
+
+          {/* 3. APPLICATION ROUTE */}
           <Route 
             path="/apply/:jobId" 
             element={
@@ -75,7 +83,7 @@ const AppContent = () => {
             } 
           />
 
-          {/* 3. AUTH ROUTES */}
+          {/* 4. AUTH ROUTES (Login) */}
           <Route
             path="/jobseeker/login"
             element={!isAuthenticated ? <JobseekerLogin /> : <Navigate to="/jobseeker/dashboard" replace />}
@@ -89,7 +97,7 @@ const AppContent = () => {
             element={!isAuthenticated ? <AdminLogin /> : <Navigate to="/admin/dashboard" replace />}
           />
 
-          {/* 4. PROTECTED DASHBOARDS (Wildcard /* allows nested routes inside these components) */}
+          {/* 5. PROTECTED DASHBOARDS */}
           <Route
             path="/jobseeker/dashboard/*"
             element={isAuthenticated && role?.toLowerCase() === "jobseeker" ? <JobseekerDashboard /> : <Navigate to="/jobseeker/login" replace />}
@@ -103,11 +111,11 @@ const AppContent = () => {
             element={isAuthenticated && role?.toLowerCase() === "admin" ? <AdminDashboard /> : <Navigate to="/admin/login" replace />}
           />
 
-          {/* 5. GLOBAL FALLBACK ROUTES (Shared standalone chat) */}
+          {/* 6. GLOBAL FALLBACK ROUTES */}
           <Route path="/chat" element={isAuthenticated ? <ChatPage /> : <Navigate to="/" replace />} />
           <Route path="/chat/:receiverId" element={isAuthenticated ? <ChatPage /> : <Navigate to="/" replace />} />
 
-          {/* 6. FALLBACK */}
+          {/* 7. FALLBACK */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

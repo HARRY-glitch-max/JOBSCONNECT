@@ -1,16 +1,20 @@
 import express from "express";
-import { registerAdmin, loginAdmin, getAdminReports } from "../controllers/adminController.js";
-import { adminProtect } from "../middleware/authMiddleware.js"; // ✅ use this
+import { 
+  registerAdmin, 
+  loginAdmin, 
+  getAdminReports 
+} from "../controllers/adminController.js";
+// ✅ Import BOTH protect (global) and adminProtect (role-specific)
+import { protect, adminProtect } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-// Register a new admin
+// 1. Public Auth Routes
 router.post("/register", registerAdmin);
-
-// Login admin
 router.post("/login", loginAdmin);
 
-// Generate reports (protected + admin-only)
-router.get("/reports", adminProtect, getAdminReports);
+// 2. Protected Admin-Only Routes
+// 🚩 CRITICAL: 'protect' MUST come before 'adminProtect'
+router.get("/reports", protect, adminProtect, getAdminReports);
 
 export default router;
