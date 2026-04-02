@@ -10,7 +10,6 @@ import { getMessages, sendMessage } from "../api/chat";
 import { AuthContext } from "../contexts/AuthContext";
 
 const ChatPage = () => {
-  // 1. Pull data directly from AuthContext
   const { user, role, employerId, loading: authLoading } = useContext(AuthContext); 
   const { receiverId: routeReceiverId } = useParams();
   const location = useLocation();
@@ -18,8 +17,9 @@ const ChatPage = () => {
   const searchParams = new URLSearchParams(location.search);
   const queryName = searchParams.get("name");
 
-  // 2. Identify the Sender (Crucial Fix for Employer Role)
+  // 1. Identification logic
   const receiverId = (routeReceiverId && routeReceiverId !== "messages") ? routeReceiverId.trim() : null;
+  // Crucial: Use employerId if role is employer, otherwise fallback to standard user ID
   const senderId = role === "employer" ? employerId : (user?._id || user?.id);
 
   const [displayName, setDisplayName] = useState(queryName || "Conversation");
@@ -31,7 +31,6 @@ const ChatPage = () => {
   const scrollRef = useRef(null);
   const textareaRef = useRef(null);
 
-  // Sync the display name from navigation or query params
   useEffect(() => {
     if (queryName) {
       setDisplayName(queryName);
@@ -40,10 +39,8 @@ const ChatPage = () => {
     }
   }, [queryName, location.state]);
 
-  // Fetch Chat History
   const fetchMessages = useCallback(async (showLoading = false) => {
     if (!receiverId || !senderId) return;
-
     try {
       if (showLoading) setLoading(true);
       const data = await getMessages(senderId, receiverId);
@@ -55,7 +52,6 @@ const ChatPage = () => {
     }
   }, [receiverId, senderId]);
 
-  // Poll for messages
   useEffect(() => {
     if (!receiverId || !senderId) return;
     fetchMessages(true);
@@ -63,7 +59,6 @@ const ChatPage = () => {
     return () => clearInterval(interval);
   }, [fetchMessages, receiverId, senderId]);
 
-  // Auto-scroll logic
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -79,14 +74,9 @@ const ChatPage = () => {
   const handleSend = async (e) => {
     if (e) e.preventDefault();
     
-    // Validates all required fields before attempting execution
+    // Validate everything needed for the backend
     if (!newMsg.trim() || !receiverId || !senderId || !role) {
-      console.error("❌ Send Blocked - Missing:", { 
-        msg: !!newMsg.trim(), 
-        receiver: !!receiverId, 
-        sender: !!senderId, 
-        role: !!role 
-      });
+      console.error("❌ Send Blocked - Missing context:", { senderId, receiverId, role });
       return;
     }
 
@@ -94,19 +84,18 @@ const ChatPage = () => {
     setNewMsg(""); 
     setIsSending(true);
 
-    const isEmployer = role.toLowerCase() === "employer";
-    const senderModel = isEmployer ? "Employer" : "Jobseeker";
-    const receiverModel = isEmployer ? "Jobseeker" : "Employer";
+    // ✅ ALIGN WITH BACKEND: The backend expects "senderType"
+    // Use proper casing to match your Mongoose enum: "Jobseeker" or "Employer"
+    const senderType = role.toLowerCase() === "employer" ? "Employer" : "Jobseeker";
 
     const payload = {
       senderId,
-      senderModel,
-      senderName: user?.name || "User",
-      senderAvatar: user?.profilePicture || user?.avatar || null,
-      receiverId,
-      receiverModel,
-      receiverName: displayName,
+      senderType, // Matches req.body.senderType in controller
       message: messageText,
+      receiverId,
+      // Optional metadata for instant UI updates if needed
+      senderName: user?.companyName || user?.name || "User",
+      senderAvatar: user?.avatar || user?.profilePicture || null,
     };
 
     try {
@@ -117,8 +106,11 @@ const ChatPage = () => {
         textareaRef.current.style.height = 'inherit';
       }
     } catch (err) {
-      console.error("❌ Send Failed:", err.response?.data || err);
-      setNewMsg(messageText); 
+      // Revert text on failure so user doesn't lose it
+      setNewMsg(messageText);
+      // Detailed error logging
+      const errorMsg = err.response?.data?.message || "Check server logs for Profile Lookup failure.";
+      console.error(`❌ Send Failed: ${errorMsg}`);
     } finally {
       setIsSending(false);
     }
@@ -131,7 +123,6 @@ const ChatPage = () => {
     }
   };
 
-  // 🛡️ Auth Guard
   if (authLoading || (!user && !senderId)) {
     return (
       <div className="flex flex-col items-center justify-center h-full">
@@ -141,7 +132,6 @@ const ChatPage = () => {
     );
   }
 
-  // Empty State
   if (!receiverId) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-slate-400 bg-white p-10">
@@ -159,14 +149,14 @@ const ChatPage = () => {
       {/* Header */}
       <div className="flex items-center justify-between px-8 py-6 border-b border-slate-50 bg-white/80 backdrop-blur-md sticky top-0 z-20">
         <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-slate-900 text-white flex items-center justify-center font-black text-xl">
+          <div className="w-14 h-14 rounded-2xl bg-slate-900 text-white flex items-center justify-center font-black text-xl shadow-inner">
             {displayName?.charAt(0)}
           </div>
           <div>
             <h2 className="font-black text-slate-900 text-xl tracking-tight">{displayName}</h2>
             <div className="flex items-center gap-2 mt-1">
               <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
-              <span className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em]">Online</span>
+              <span className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em]">Active Now</span>
             </div>
           </div>
         </div>
@@ -181,10 +171,12 @@ const ChatPage = () => {
         ) : messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center opacity-60">
             <MsgIcon className="text-blue-600 mb-4" size={24} />
-            <p className="font-bold text-slate-900">No history found</p>
+            <p className="font-bold text-slate-900 text-lg">Start the conversation</p>
+            <p className="text-sm text-slate-500">Say hello to {displayName}!</p>
           </div>
         ) : (
           messages.map((msg, idx) => {
+            // Ensure ID comparison works regardless of if the ID is a string or object
             const isMe = String(msg.senderId) === String(senderId);
             return (
               <div key={msg._id || idx} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
@@ -218,7 +210,7 @@ const ChatPage = () => {
             onChange={handleTextareaChange}
             onKeyDown={handleKeyPress}
             rows={1}
-            placeholder={`Reply to ${displayName}...`}
+            placeholder={`Message ${displayName}...`}
             className="flex-1 bg-transparent resize-none p-3 text-[15px] font-bold text-slate-900 focus:outline-none min-h-[48px]"
           />
           <button

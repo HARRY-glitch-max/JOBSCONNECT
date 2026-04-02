@@ -10,14 +10,14 @@ import mongoose from "mongoose";
 import http from "http";
 import { Server } from "socket.io";
 
-// --- 1. IMPORT MODELS ---
+// --- MY MODEL IMPORTS ---
 import "./models/Jobseeker.js"; 
 import "./models/Employer.js";
 import "./models/Job.js";
 import "./models/Interview.js";
 import Chat from "./models/Chat.js"; 
 
-// --- Load environment variables ---
+// --- Loading my environment variables ---
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -53,7 +53,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// --- ROUTES ---
+// ---Importing Routes---
 import jobseekerRoutes from "./routes/jobseekerRoutes.js";
 import employerRoutes from "./routes/employerRoutes.js";
 import jobRoutes from "./routes/jobRoutes.js";
@@ -106,18 +106,13 @@ const startServer = async () => {
     io.on("connection", (socket) => {
       console.log("🔌 User connected:", socket.id);
 
-      // Join a private room based on User ID (works for both Jobseeker & Employer)
       socket.on("join", (userId) => {
         socket.join(userId);
         console.log(`User ${userId} joined their private room`);
       });
-
-      // Handle Real-time Messages
       socket.on("send_message", async (msg) => {
         try {
           const { senderId, receiverId, message, senderType } = msg;
-
-          // Dynamically select models to support cross-role communication
           const JobSeeker = mongoose.model("JobSeeker");
           const Employer = mongoose.model("Employer");
 
@@ -140,8 +135,6 @@ const startServer = async () => {
           });
 
           const savedMsg = await chat.save();
-
-          // Emit the message to both participants' private rooms
           io.to(receiverId).emit("receive_message", savedMsg);
           io.to(senderId).emit("receive_message", savedMsg);
 
@@ -150,19 +143,17 @@ const startServer = async () => {
           socket.emit("error", { message: "Could not send message" });
         }
       });
-
-      // Typing indicators for better UX
       socket.on("typing", ({ receiverId, isTyping }) => {
         socket.to(receiverId).emit("display_typing", { isTyping });
       });
 
       socket.on("disconnect", () => {
-        console.log("❌ User disconnected:", socket.id);
+        console.log("User disconnected:", socket.id);
       });
     });
 
     server.listen(PORT, "0.0.0.0", () => {
-      console.log(`🚀 Server running at http://0.0.0.0:${PORT}`);
+      console.log(`Server running at http://0.0.0.0:${PORT}`);
     });
 
     const shutdown = async () => {
