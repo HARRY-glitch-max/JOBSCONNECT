@@ -20,28 +20,26 @@ import ChatPage from "./pages/ChatPage";
 // Jobseeker
 import JobseekerLogin from "./pages/JobseekerLogin";
 import JobseekerDashboard from "./pages/JobseekerDashboard";
-import JobseekerRegister from "./pages/JobseekerRegister"; // ✅ Added
+import JobseekerRegister from "./pages/JobseekerRegister";
 
 // Employer
 import EmployerLogin from "./pages/EmployerLogin";
 import EmployerDashboard from "./pages/EmployerDashboard";
-import EmployerRegister from "./pages/EmployerRegister"; // ✅ Added
+import EmployerRegister from "./pages/EmployerRegister";
 
 // Admin
 import AdminLogin from "./pages/AdminLogin";
 import AdminDashboard from "./pages/AdminDashboard";
-import AdminRegister from "./pages/AdminRegister"; // ✅ Added
+import AdminRegister from "./pages/AdminRegister";
 
 const AppContent = () => {
   const { loading, user, role } = useContext(AuthContext);
   const location = useLocation();
 
-  // Debugging navigation
   useEffect(() => {
     console.log("📍 Navigation Change:", location.pathname);
   }, [location]);
 
-  // Logic to hide general Navbar when inside any dashboard or application flow
   const hideNavbar =
     location.pathname.startsWith("/employer/dashboard") ||
     location.pathname.startsWith("/admin/dashboard") ||
@@ -68,7 +66,7 @@ const AppContent = () => {
           <Route path="/" element={<Home />} />
           <Route path="/jobs" element={<Jobs />} />
 
-          {/* 2. REGISTRATION ROUTES (Fixed your issue) */}
+          {/* 2. REGISTRATION ROUTES */}
           <Route path="/jobseeker/register" element={<JobseekerRegister />} />
           <Route path="/employer/register" element={<EmployerRegister />} />
           <Route path="/admin/register" element={<AdminRegister />} />
@@ -83,7 +81,7 @@ const AppContent = () => {
             } 
           />
 
-          {/* 4. AUTH ROUTES (Login) */}
+          {/* 4. AUTH ROUTES */}
           <Route
             path="/jobseeker/login"
             element={!isAuthenticated ? <JobseekerLogin /> : <Navigate to="/jobseeker/dashboard" replace />}
@@ -97,7 +95,7 @@ const AppContent = () => {
             element={!isAuthenticated ? <AdminLogin /> : <Navigate to="/admin/dashboard" replace />}
           />
 
-          {/* 5. PROTECTED DASHBOARDS */}
+          {/* 5. PROTECTED DASHBOARDS (Splat routes handle internal navigation) */}
           <Route
             path="/jobseeker/dashboard/*"
             element={isAuthenticated && role?.toLowerCase() === "jobseeker" ? <JobseekerDashboard /> : <Navigate to="/jobseeker/login" replace />}
@@ -112,7 +110,6 @@ const AppContent = () => {
           />
 
           {/* 6. GLOBAL FALLBACK ROUTES */}
-          <Route path="/chat" element={isAuthenticated ? <ChatPage /> : <Navigate to="/" replace />} />
           <Route path="/chat/:receiverId" element={isAuthenticated ? <ChatPage /> : <Navigate to="/" replace />} />
 
           {/* 7. FALLBACK */}

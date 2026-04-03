@@ -2,26 +2,28 @@ import axios from 'axios';
 
 /**
  * Axios instance for all API requests.
- * Port 5000 is used for the backend to avoid conflicts with Vite (5173).
+ * Standardized to communicate with the Node/Express backend on Port 5000.
  */
 const apiClient = axios.create({
   baseURL: 'http://localhost:5000/api', 
-  timeout: 15000, // Increased to 15s for heavier report generation tasks
+  timeout: 15000, 
 });
 
 /**
- * Request Interceptor
- * Dynamically retrieves the token and handles the 'jobConnectUser' key.
+ * Request Interceptor: Injects the JWT Token
+ * It looks into localStorage for 'jobConnectUser' and pulls the token.
  */
 apiClient.interceptors.request.use(
   (config) => {
-    // Matches the key used in your AuthContext for consistency
     const storageData = localStorage.getItem('jobConnectUser');
     
     if (storageData) {
       try {
         const parsedData = JSON.parse(storageData);
-        // Extracts token from various possible structures (Direct or Nested)
+        
+        // ✅ FLEXIBLE TOKEN EXTRACTION
+        // We check the top level (from your AuthContext spread) 
+        // and nested paths just in case the backend structure varies.
         const token = parsedData.token || parsedData.data?.token || parsedData.user?.token;
         
         if (token) {
@@ -38,8 +40,7 @@ apiClient.interceptors.request.use(
 );
 
 /**
- * Response Interceptor
- * Updated to handle specific 'Report' sync errors and Session Expiry.
+ * Response Interceptor: Error Handling & Session Management
  */
 apiClient.interceptors.response.use(
   (response) => response,
@@ -47,34 +48,34 @@ apiClient.interceptors.response.use(
     const { response, config } = error;
 
     if (response) {
-      // 401: Unauthorized / Session Expired
+      // --- 401: Unauthorized / Session Expired ---
       if (response.status === 401) {
-        console.warn("Session expired or invalid token. Redirecting to login...");
+        console.warn("Session expired or invalid token.");
         
-        // Only clear and redirect if we aren't already on the login page
+        // Prevent infinite redirect loops if already on login
         if (!window.location.pathname.includes('/login')) {
           localStorage.removeItem('jobConnectUser');
           window.location.href = '/login?expired=true';
         }
       }
 
-      // 403: Forbidden (Role Mismatch)
+      // --- 403: Forbidden ---
       if (response.status === 403) {
-        console.error("Access Denied: Employers only. Check your account permissions.");
+        console.error("Forbidden: You do not have permission for this action.");
       }
 
-      // 404: Endpoint missing
+      // --- 404: Route Not Found ---
       if (response.status === 404) {
-        console.error(`API Error: The endpoint ${config.url} does not exist on Port 5000.`);
+        console.error(`404 Error: ${config.url} not found. Check backend route prefixes.`);
       }
 
-      // 500: Server Error (Common during complex report generation)
+      // --- 500: Internal Server Error ---
       if (response.status >= 500) {
-        console.error("Backend Server Error: The report could not be generated at this time.");
+        console.error("Server Error: Something went wrong on the backend.");
       }
     } else {
-      // Network Error (Backend is likely offline)
-      console.error("Connection Refused: Ensure your Node.js/Express server is running.");
+      // --- Network Error (Server Down) ---
+      console.error("Network Error: Could not connect to the backend server at localhost:5000.");
     }
 
     return Promise.reject(error);

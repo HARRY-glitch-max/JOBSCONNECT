@@ -17,7 +17,6 @@ import "./models/Job.js";
 import "./models/Interview.js";
 import Chat from "./models/Chat.js"; 
 
-// --- Loading environment variables ---
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -94,7 +93,6 @@ const startServer = async () => {
 
     const server = http.createServer(app);
 
-    // --- SOCKET.IO INITIALIZATION ---
     const io = new Server(server, {
       cors: {
         origin: allowedOrigins,
@@ -103,16 +101,17 @@ const startServer = async () => {
       },
     });
 
+    app.set("socketio", io);
+
     io.on("connection", (socket) => {
       console.log("🔌 User connected:", socket.id);
 
       socket.on("join", (userId) => {
-        // Special Case: Administrators join a global admin room to see all employer help requests
         if (userId === "admin") {
           socket.join("admin_room");
           console.log("Administrator joined the global admin room");
         }
-        socket.join(userId);
+        socket.join(userId.toString());
         console.log(`User ${userId} joined their private room`);
       });
 
@@ -122,9 +121,9 @@ const startServer = async () => {
           const JobSeeker = mongoose.model("JobSeeker");
           const Employer = mongoose.model("Employer");
 
-          let sender, receiver;
+          let sender, receiver, receiverType;
 
-          // 1. Resolve Sender Info
+          // 1. Resolve Sender
           if (senderType === "JobSeeker") {
             sender = await JobSeeker.findById(senderId).select("name avatar");
           } else if (senderType === "Employer") {
@@ -133,48 +132,57 @@ const startServer = async () => {
             sender = { name: "System Admin", avatar: null };
           }
 
-          // 2. Resolve Receiver Info (Admin vs User)
+          // 2. Resolve Receiver & Dynamic Model Type
           if (receiverId === "admin") {
             receiver = { name: "Platform Admin", avatar: null };
+            receiverType = "Admin";
           } else {
-            // Check both collections to find the receiver
-            receiver = await Employer.findById(receiverId).select("companyName avatar") || 
-                       await JobSeeker.findById(receiverId).select("name avatar");
+            // Check Employer first, then JobSeeker to determine receiverModel
+            const emp = await Employer.findById(receiverId).select("companyName avatar");
+            if (emp) {
+              receiver = emp;
+              receiverType = "Employer";
+            } else {
+              receiver = await JobSeeker.findById(receiverId).select("name avatar");
+              receiverType = "JobSeeker";
+            }
           }
 
-          // 3. Persist Chat to Database
+          // 3. Create Chat with REQUIRED Model Fields
           const chat = new Chat({
             senderId,
             senderName: sender?.name || sender?.companyName || "Unknown",
             senderAvatar: sender?.avatar || null,
+            senderModel: senderType, // ✅ FIXED: Required field
+            
             receiverId,
             receiverName: receiver?.name || receiver?.companyName || "Unknown",
             receiverAvatar: receiver?.avatar || null,
+            receiverModel: receiverType, // ✅ FIXED: Required field
+            
             message,
             timestamp: new Date(),
           });
 
           const savedMsg = await chat.save();
 
-          // 4. Real-time Emission
+          // 4. Real-time Delivery
           if (receiverId === "admin") {
-            // Route to all connected administrators
             io.to("admin_room").emit("receive_message", savedMsg);
           } else {
-            io.to(receiverId).emit("receive_message", savedMsg);
+            io.to(receiverId.toString()).emit("receive_message", savedMsg);
           }
           
-          // Emit back to sender to update their local UI state
-          io.to(senderId).emit("receive_message", savedMsg);
+          io.to(senderId.toString()).emit("receive_message", savedMsg);
 
         } catch (err) {
           console.error("Socket Messaging Error:", err);
-          socket.emit("error", { message: "Could not send message" });
+          socket.emit("error", { message: "Validation failed: model paths required." });
         }
       });
 
       socket.on("typing", ({ receiverId, isTyping }) => {
-        const target = receiverId === "admin" ? "admin_room" : receiverId;
+        const target = receiverId === "admin" ? "admin_room" : receiverId.toString();
         socket.to(target).emit("display_typing", { isTyping });
       });
 

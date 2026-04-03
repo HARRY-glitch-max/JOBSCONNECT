@@ -1,8 +1,19 @@
-import React, { useContext, useEffect, useState } from "react";
+import React, { useContext, useEffect, useState, useCallback } from "react";
 import { Routes, Route, NavLink, useNavigate, useLocation } from "react-router-dom";
-import { 
-  MessageSquare, PlusCircle, Briefcase, Users, Calendar,
-  UserCircle, LogOut, LayoutDashboard, ChevronRight, Bell, CheckCircle, TrendingUp
+import {
+  MessageSquare,
+  PlusCircle,
+  Briefcase,
+  Users,
+  Calendar,
+  UserCircle,
+  LogOut,
+  LayoutDashboard,
+  ChevronRight,
+  Bell,
+  TrendingUp,
+  Sparkles,
+  Search
 } from "lucide-react";
 
 import ChatPage from "./ChatPage";
@@ -10,33 +21,73 @@ import PostJob from "./PostJob";
 import Interviews from "./Interviews";
 import Jobs from "./Jobs";
 import EmployerApplications from "./EmployerApplications";
-import EmployerReports from "./EmployerReports"; // ✅ Import the new Reports component
+import EmployerReports from "./EmployerReports";
+import EmployerNotifications from "./EmployerNotifications";
 import { AuthContext } from "../contexts/AuthContext";
-import apiClient from "../api/client"; 
+import apiClient from "../api/client";
+import { socket } from "../socket";
 
 export default function EmployerDashboard() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout, setAuthUser } = useContext(AuthContext);
+  const { user, logout } = useContext(AuthContext);
 
-  const [showNotifications, setShowNotifications] = useState(false);
+  const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
 
-  // Helper flags
-  const isApplicationsPage = location.pathname.includes("applications");
-  const isChatActive = location.pathname.includes("chat") || location.pathname.includes("messages");
+  const isChatActive = location.pathname.includes("/chat") || location.pathname.includes("/messages");
 
-  // Sync unread count whenever the user object changes
-  useEffect(() => {
-    if (user?.notifications) {
-      const unread = user.notifications.filter(n => !n.read).length;
-      setUnreadCount(unread);
+  // ===============================
+  // FETCH NOTIFICATIONS
+  // ===============================
+  const fetchNotifications = useCallback(async () => {
+    if (!user?._id) return;
+    try {
+      const res = await apiClient.get(`/notifications/user/${user._id}`);
+      setNotifications(Array.isArray(res.data) ? res.data : []);
+    } catch (err) {
+      console.error("Error fetching dashboard notifications", err);
     }
-  }, [user]);
+  }, [user?._id]);
 
-  // Sidebar Items
+  useEffect(() => {
+    fetchNotifications();
+  }, [fetchNotifications]);
+
+  // ===============================
+  // REAL-TIME NOTIFICATIONS
+  // ===============================
+  const handleNewNotification = useCallback((newNotif) => {
+    setNotifications((prev) => {
+      if (prev.find((n) => n._id === newNotif._id)) return prev;
+      return [newNotif, ...prev];
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!socket || !user?._id) return;
+    const onConnect = () => socket.emit("join", user._id);
+    if (socket.connected) onConnect();
+
+    socket.on("connect", onConnect);
+    socket.on("new_notification", handleNewNotification);
+    socket.on("reconnect", onConnect);
+
+    return () => {
+      socket.off("connect", onConnect);
+      socket.off("new_notification", handleNewNotification);
+      socket.off("reconnect", onConnect);
+    };
+  }, [user?._id, handleNewNotification]);
+
+  useEffect(() => {
+    const count = notifications.filter((n) => !n.isRead).length;
+    setUnreadCount(count);
+  }, [notifications]);
+
   const navItems = [
-    { to: "reports", label: "Analytics", icon: <TrendingUp size={18} /> }, // ✅ Added Reports Link
+    { to: "reports", label: "Analytics", icon: <TrendingUp size={18} /> },
+    { to: "notifications", label: "Notifications", icon: <Bell size={18} /> },
     { to: "interviews", label: "Interviews", icon: <Calendar size={18} /> },
     { to: "chat", label: "Messages", icon: <MessageSquare size={18} /> },
     { to: "post-job", label: "Post a Job", icon: <PlusCircle size={18} /> },
@@ -44,188 +95,136 @@ export default function EmployerDashboard() {
     { to: "applications", label: "Applications", icon: <Users size={18} /> },
   ];
 
-  const handleMarkAsRead = async () => {
-    try {
-      await apiClient.put("/employers/notifications/read"); 
-      const updatedUser = {
-        ...user,
-        notifications: user.notifications.map(n => ({ ...n, read: true }))
-      };
-      setAuthUser(updatedUser);
-      setUnreadCount(0);
-    } catch (err) {
-      console.error("Failed to clear notifications");
-    }
-  };
-
   const getPageTitle = () => {
     if (isChatActive) return "Messages";
-    const path = location.pathname.split("/").filter(Boolean).pop();
-    const item = navItems.find(i => i.to === path);
+    const segments = location.pathname.split("/").filter(Boolean);
+    const lastSegment = segments[segments.length - 1];
+    const item = navItems.find((i) => i.to === lastSegment);
     return item ? item.label : "Dashboard Overview";
   };
 
   return (
     <div className="flex h-screen bg-slate-50 font-sans text-slate-900 overflow-hidden">
-      
-      {/* --- 1. SIDEBAR --- */}
-      <aside className="w-72 bg-white border-r border-slate-200 flex flex-col shadow-sm z-30 shrink-0">
-        <div className="p-6 mb-2">
-          <div 
-            className="flex items-center gap-3 px-2 cursor-pointer group" 
+      {/* ================= SIDEBAR ================= */}
+      <aside className="w-72 bg-[#0F172A] flex flex-col shadow-2xl shrink-0 z-20">
+        <div className="p-8">
+          <div
+            className="flex items-center gap-3 cursor-pointer group"
             onClick={() => navigate("/employer/dashboard")}
           >
-            <div className="bg-blue-600 p-2 rounded-xl text-white shadow-lg shadow-blue-200 transition-transform group-hover:scale-105">
-              <LayoutDashboard size={22} />
+            <div className="bg-blue-600 p-2.5 rounded-2xl text-white shadow-lg shadow-blue-900/50 group-hover:scale-110 transition-all duration-300">
+              <Sparkles size={22} fill="currentColor" />
             </div>
-            <span className="text-xl font-extrabold tracking-tighter text-slate-800">HireFlow</span>
+            <span className="text-2xl font-black tracking-tighter text-white">
+              HireFlow<span className="text-blue-500">.</span>
+            </span>
           </div>
         </div>
 
-        <nav className="flex-1 px-4 space-y-1 overflow-y-auto custom-scrollbar">
-          <p className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mb-4">
-            Recruitment
-          </p>
-          {navItems.map(item => (
+        <nav className="flex-1 px-4 space-y-1.5 overflow-y-auto custom-scrollbar">
+          <p className="px-4 text-[10px] font-black uppercase tracking-[0.25em] text-slate-500 mb-4 opacity-70">Management</p>
+          {navItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
-              className={({ isActive }) => {
-                const actuallyActive = isActive || (item.to === 'chat' && isChatActive);
-                return `flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-200 group ${
-                  actuallyActive
-                    ? "bg-slate-900 text-white shadow-lg shadow-slate-200"
-                    : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
-                }`;
-              }}
+              className={({ isActive }) =>
+                `flex items-center justify-between px-5 py-3.5 rounded-2xl transition-all duration-300 group ${
+                  isActive || (item.to === "chat" && isChatActive)
+                    ? "bg-blue-600 text-white shadow-xl shadow-blue-900/20 active-nav-glow"
+                    : "text-slate-400 hover:bg-slate-800/50 hover:text-slate-100"
+                }`
+              }
             >
               <div className="flex items-center gap-3">
-                {item.icon}
-                <span className="font-semibold text-sm">{item.label}</span>
+                <span className="group-hover:scale-110 transition-transform duration-300">{item.icon}</span>
+                <span className="font-bold text-[13px] tracking-wide">
+                  {item.label}
+                </span>
               </div>
-              <ChevronRight size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+
+              {unreadCount > 0 && item.to === "notifications" && (
+                <span className="bg-rose-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full ring-2 ring-[#0F172A]">
+                  {unreadCount}
+                </span>
+              )}
+              <ChevronRight size={14} className={`opacity-20 group-hover:opacity-100 transition-opacity ${item.to === "chat" && isChatActive ? "hidden" : ""}`} />
             </NavLink>
           ))}
         </nav>
 
-        <div className="p-4 border-t border-slate-100 bg-slate-50/50">
-          <div className="flex items-center gap-3 p-2 mb-4">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-sm border-2 border-white shadow-sm uppercase">
-              {user?.companyName?.charAt(0) || "E"}
+        {/* User Profile Section */}
+        <div className="m-4 p-5 rounded-[2rem] bg-slate-800/40 border border-slate-700/50 backdrop-blur-sm">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-black text-lg shadow-lg">
+              {user?.companyName?.charAt(0) || user?.name?.charAt(0) || "E"}
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-slate-800 truncate">{user?.companyName || "Employer"}</p>
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Verified Employer</p>
+            <div className="flex flex-col truncate">
+              <span className="text-[11px] font-black text-blue-400 uppercase tracking-widest mb-0.5">Employer</span>
+              <span className="text-xs font-bold text-white truncate">
+                {user?.companyName || user?.name || "Account"}
+              </span>
             </div>
           </div>
+
           <div className="flex gap-2">
-            <button onClick={() => navigate("profile")} className="flex-1 flex items-center justify-center py-2 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-all">
-              <UserCircle size={16} />
+            <button
+              onClick={() => navigate("profile")}
+              className="flex-1 py-2.5 rounded-xl bg-slate-700/50 hover:bg-slate-700 text-slate-300 transition-all flex justify-center border border-slate-600/30"
+              title="Settings"
+            >
+              <UserCircle size={18} />
             </button>
-            <button onClick={logout} className="flex-1 flex items-center justify-center py-2 rounded-lg border border-rose-100 bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white transition-all">
-              <LogOut size={16} />
+
+            <button
+              onClick={logout}
+              className="flex-1 py-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white transition-all flex justify-center border border-rose-500/20"
+              title="Logout"
+            >
+              <LogOut size={18} />
             </button>
           </div>
         </div>
       </aside>
 
-      {/* --- 2. MAIN CONTENT AREA --- */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        
-        <header className={`h-20 flex items-center justify-between px-10 shrink-0 z-20 transition-colors duration-300 ${
-          isApplicationsPage ? "bg-slate-900 text-white border-b border-slate-800" : "bg-white/80 backdrop-blur-md border-b border-slate-200"
-        }`}>
-          <div className="flex items-center gap-4">
-            <div>
-              <h1 className="text-xl font-bold tracking-tight">{getPageTitle()}</h1>
-              <p className={`text-xs font-medium mt-0.5 ${isApplicationsPage ? "text-slate-400" : "text-slate-500"}`}>
-                {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-              </p>
-            </div>
-            {user?.lastReportReceived && (
-              <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-green-50 text-green-600 rounded-full border border-green-100">
-                <CheckCircle size={12} />
-                <span className="text-[10px] font-bold uppercase tracking-wider">Reports Synced</span>
-              </div>
-            )}
+      {/* ================= MAIN CONTENT ================= */}
+      <main className="flex-1 flex flex-col overflow-hidden relative">
+        <header className="h-24 flex items-center justify-between px-12 border-b border-slate-200/60 bg-white/70 backdrop-blur-xl z-10">
+          <div>
+            <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.3em] mb-1">Workspace</p>
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight">{getPageTitle()}</h1>
           </div>
-
-          <div className="flex items-center gap-5 relative">
-            <button 
-              onClick={() => setShowNotifications(!showNotifications)}
-              className={`p-2 rounded-full transition-colors relative ${
-                isApplicationsPage ? "hover:bg-slate-800" : "hover:bg-slate-100 text-slate-400"
-              }`}
-            >
-              <Bell size={20} />
-              {unreadCount > 0 && (
-                <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-rose-500 border-2 border-white rounded-full"></span>
-              )}
-            </button>
-
-            {showNotifications && (
-              <div className="absolute right-0 top-12 w-80 bg-white border border-slate-200 shadow-2xl rounded-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2">
-                <div className="p-4 border-b border-slate-100 flex justify-between items-center">
-                  <h3 className="font-bold text-sm text-slate-800">Notifications</h3>
-                  <button onClick={handleMarkAsRead} className="text-[10px] font-bold text-blue-600 uppercase hover:underline">Clear All</button>
-                </div>
-                <div className="max-h-64 overflow-y-auto">
-                  {user?.notifications?.length > 0 ? (
-                    user.notifications.slice().reverse().map((notif, idx) => (
-                      <div key={idx} className={`p-4 border-b border-slate-50 hover:bg-slate-50 transition-colors ${!notif.read ? 'bg-blue-50/30' : ''}`}>
-                        <p className="text-xs text-slate-700 leading-relaxed">{notif.message}</p>
-                        <p className="text-[10px] text-slate-400 mt-2 font-medium">
-                          {new Date(notif.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </p>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="p-8 text-center text-slate-400 text-xs">No notifications yet.</div>
-                  )}
-                </div>
+          
+          <div className="flex items-center gap-8">
+            <div className="relative hidden lg:block">
+              <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input 
+                type="text" 
+                placeholder="Search candidates..." 
+                className="pl-11 pr-6 py-2.5 bg-slate-100 border-none rounded-2xl text-xs font-bold focus:ring-2 focus:ring-blue-500/20 transition-all w-64"
+              />
+            </div>
+            <div className="flex flex-col items-end">
+              <div className="text-[11px] font-black uppercase tracking-widest text-slate-400">
+                {new Date().toLocaleDateString('en-US', { weekday: 'long' })}
               </div>
-            )}
-
-            <div className={`h-6 w-[1px] ${isApplicationsPage ? "bg-slate-700" : "bg-slate-200"}`}></div>
-            <button 
-              onClick={() => navigate("post-job")} 
-              className="bg-blue-600 text-white px-5 py-2 rounded-xl text-sm font-bold hover:bg-blue-700 transition-all shadow-md active:scale-95"
-            >
-              Post New Job
-            </button>
+              <div className="text-sm font-bold text-slate-900">
+                {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+              </div>
+            </div>
           </div>
         </header>
 
-        <div 
-          onClick={() => setShowNotifications(false)}
-          className={`flex-1 overflow-y-auto transition-colors duration-300 ${
-            isApplicationsPage ? "bg-slate-900" : "bg-slate-50"
-          }`}
-        >
+        <div className="flex-1 overflow-y-auto bg-gradient-to-b from-white to-slate-50/50 p-8">
           <Routes>
             <Route path="chat" element={<ChatPage />} />
             <Route path="chat/:receiverId" element={<ChatPage />} />
+            <Route path="notifications" element={<EmployerNotifications />} />
             <Route path="applications" element={<EmployerApplications />} />
-            
-            {/* ✅ NEW: Reports Route Added Here */}
             <Route path="reports" element={<EmployerReports />} />
-
-            <Route
-              path="*"
-              element={
-                <div className="p-8 max-w-7xl mx-auto w-full">
-                  <div className="bg-white border border-slate-200 rounded-[2.5rem] shadow-sm p-8 min-h-[75vh]">
-                    <Routes>
-                      <Route path="/" element={<DefaultOverview lastSync={user?.lastReportReceived} />} />
-                      <Route path="interviews" element={<Interviews />} />
-                      <Route path="post-job" element={<PostJob />} />
-                      <Route path="my-jobs" element={<Jobs />} />
-                      <Route path="*" element={<DefaultOverview />} />
-                    </Routes>
-                  </div>
-                </div>
-              }
-            />
+            <Route path="interviews" element={<Interviews />} />
+            <Route path="post-job" element={<PostJob />} />
+            <Route path="my-jobs" element={<Jobs />} />
+            <Route path="/" element={<DefaultOverview />} />
           </Routes>
         </div>
       </main>
@@ -233,32 +232,74 @@ export default function EmployerDashboard() {
   );
 }
 
-function DefaultOverview({ lastSync }) {
+function DefaultOverview() {
   const navigate = useNavigate();
-  return (
-    <div className="flex flex-col items-center justify-center py-20 text-center">
-      <div className="bg-blue-50 w-24 h-24 rounded-[2.5rem] flex items-center justify-center mb-8 text-blue-600 shadow-inner">
-        <LayoutDashboard size={40} />
-      </div>
-      <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Employer Dashboard</h2>
-      <p className="text-slate-500 mt-3 max-w-sm leading-relaxed font-medium">
-        Review your latest applications, schedule interviews, and manage your job postings from one central hub.
-      </p>
-      
-      {/* ✅ Direct link to Reports in the empty state */}
-      <button 
-        onClick={() => navigate("reports")}
-        className="mt-6 flex items-center gap-2 text-blue-600 font-bold text-sm hover:underline"
-      >
-        <TrendingUp size={16} />
-        View Real-time Analytics
-      </button>
 
-      {lastSync && (
-        <p className="mt-4 text-[10px] font-bold text-green-600 bg-green-50 px-4 py-2 rounded-full uppercase tracking-widest border border-green-100">
-          Last Report Received: {new Date(lastSync).toLocaleString()}
-        </p>
-      )}
+  return (
+    <div className="max-w-5xl mx-auto py-12">
+      <div className="relative overflow-hidden bg-[#0F172A] rounded-[3rem] p-12 text-white shadow-2xl shadow-blue-900/20">
+        {/* Background Decoration */}
+        <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/20 blur-[100px] rounded-full -mr-20 -mt-20"></div>
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-indigo-600/10 blur-[80px] rounded-full -ml-20 -mb-20"></div>
+
+        <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-12">
+          <div className="flex-1 text-center md:text-left">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-black uppercase tracking-widest mb-6">
+              <Sparkles size={12} /> Live Platform Status: Active
+            </div>
+            <h2 className="text-5xl font-black tracking-tight leading-[1.1] mb-6">
+              Empower your <br />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400">Hiring Pipeline.</span>
+            </h2>
+            <p className="text-slate-400 font-medium text-lg max-w-md leading-relaxed mb-10">
+              Welcome back to your command center. Manage applications, schedule interviews, and chat with talent seamlessly.
+            </p>
+            <div className="flex flex-wrap gap-4 justify-center md:justify-start">
+              <button
+                onClick={() => navigate("post-job")}
+                className="bg-blue-600 text-white px-8 py-4 rounded-2xl font-bold hover:bg-blue-500 transition-all hover:shadow-lg hover:shadow-blue-600/30 active:scale-95"
+              >
+                Post New Opening
+              </button>
+              <button
+                onClick={() => navigate("reports")}
+                className="bg-slate-800 text-white px-8 py-4 rounded-2xl font-bold hover:bg-slate-700 transition-all border border-slate-700 active:scale-95"
+              >
+                View Insights
+              </button>
+            </div>
+          </div>
+
+          <div className="flex-shrink-0 hidden lg:block">
+            <div className="w-72 h-72 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-[3.5rem] rotate-12 flex items-center justify-center shadow-2xl shadow-blue-900/40 border-4 border-white/10">
+              <LayoutDashboard size={100} className="text-white -rotate-12" strokeWidth={1.5} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Quick Access Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-12">
+        {[
+          { label: "Talent Pool", val: "Applications", link: "applications", color: "text-blue-600", bg: "bg-blue-50" },
+          { label: "Calendar", val: "Interviews", link: "interviews", color: "text-indigo-600", bg: "bg-indigo-50" },
+          { label: "Active", val: "My Jobs", link: "my-jobs", color: "text-emerald-600", bg: "bg-emerald-50" },
+        ].map((item, idx) => (
+          <button
+            key={idx}
+            onClick={() => navigate(item.link)}
+            className="group bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all text-left"
+          >
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">{item.label}</p>
+            <div className="flex items-center justify-between">
+              <h3 className={`text-2xl font-black text-slate-900`}>{item.val}</h3>
+              <div className={`p-2 rounded-lg ${item.bg} ${item.color} group-hover:scale-110 transition-transform`}>
+                <ChevronRight size={20} />
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
