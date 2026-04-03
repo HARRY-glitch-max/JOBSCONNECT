@@ -1,4 +1,3 @@
-// src/contexts/AuthContext.jsx
 import { createContext, useState, useEffect } from "react";
 import apiClient from "../api/client";
 
@@ -9,6 +8,7 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Standardizing the key to 'jobConnectUser' as per your setup
     const savedUser = localStorage.getItem("jobConnectUser");
     if (savedUser) {
       try {
@@ -20,7 +20,7 @@ export const AuthProvider = ({ children }) => {
     setLoading(false);
   }, []);
 
-  // ✅ Login (no navigation here)
+  // ✅ Login
   const login = async (email, password, role = "jobseeker") => {
     let endpoint;
     if (role === "admin") {
@@ -34,22 +34,24 @@ export const AuthProvider = ({ children }) => {
     try {
       const { data } = await apiClient.post(endpoint, { email, password, role });
 
+      // ✅ FIXED: We prioritize the populated employerId object from the backend
       const userWithRole = {
         ...data,
-        role,
-        employerId: data.employerId || data._id || data.id,
+        role: data.role || role,
+        // If it's an admin, data.employerId is now the populated object
+        employerId: data.employerId || null, 
       };
 
       setUser(userWithRole);
       localStorage.setItem("jobConnectUser", JSON.stringify(userWithRole));
-      return userWithRole; // caller handles navigation
+      return userWithRole; 
     } catch (err) {
       console.error("Login failed:", err.response?.data || err.message);
       throw err;
     }
   };
 
-  // ✅ Register (no navigation here)
+  // ✅ Register
   const register = async (formData, role = "jobseeker") => {
     let endpoint;
     if (role === "admin") {
@@ -65,35 +67,35 @@ export const AuthProvider = ({ children }) => {
 
       const userWithRole = {
         ...data,
-        role,
-        employerId: data.employerId || data._id || data.id,
+        role: data.role || role,
+        employerId: data.employerId || null,
       };
 
       setUser(userWithRole);
       localStorage.setItem("jobConnectUser", JSON.stringify(userWithRole));
-      return userWithRole; // caller handles navigation
+      return userWithRole;
     } catch (err) {
       console.error("Registration failed:", err.response?.data || err.message);
       throw err;
     }
   };
 
-  // ✅ Setter
+  // ✅ Manual Setter
   const setAuthUser = (userData) => {
     const userWithRole = {
       ...userData,
       role: userData.role || "jobseeker",
-      employerId: userData.employerId || userData._id || userData.id,
+      employerId: userData.employerId || null,
     };
     setUser(userWithRole);
     localStorage.setItem("jobConnectUser", JSON.stringify(userWithRole));
   };
 
-  // ✅ Logout (no navigation here)
+  // ✅ Logout
   const logout = () => {
     setUser(null);
     localStorage.removeItem("jobConnectUser");
-    // caller handles navigation
+    // Navigation is handled by the component calling logout
   };
 
   const role = user?.role;
@@ -114,7 +116,8 @@ export const AuthProvider = ({ children }) => {
         isCompanyAdmin,
         isEmployer,
         isJobseeker,
-        employerId: user?.employerId,
+        // ✅ This will now return the object or the string ID correctly
+        employerId: user?.employerId, 
       }}
     >
       {!loading && children}

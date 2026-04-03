@@ -2,34 +2,33 @@ import axios from 'axios';
 
 /**
  * Axios instance for all API requests.
- * Using an absolute URL (http://localhost:5000/api) is the safest way to 
- * avoid 404 errors caused by Vite's port mismatch (5173).
+ * Port 5000 is used for the backend to avoid conflicts with Vite (5173).
  */
 const apiClient = axios.create({
   baseURL: 'http://localhost:5000/api', 
-  timeout: 10000, // 10 seconds timeout
+  timeout: 15000, // Increased to 15s for heavier report generation tasks
 });
 
 /**
  * Request Interceptor
- * Dynamically retrieves the token from localStorage before every request.
+ * Dynamically retrieves the token and handles the 'jobConnectUser' key.
  */
 apiClient.interceptors.request.use(
   (config) => {
-    // 🔍 IMPORTANT: Verify this key matches exactly what's in your AuthContext/Login logic
+    // Matches the key used in your AuthContext for consistency
     const storageData = localStorage.getItem('jobConnectUser');
     
     if (storageData) {
       try {
         const parsedData = JSON.parse(storageData);
-        // Supports both { token: "..." } or { data: { token: "..." } } structures
-        const token = parsedData.token || parsedData.data?.token;
+        // Extracts token from various possible structures (Direct or Nested)
+        const token = parsedData.token || parsedData.data?.token || parsedData.user?.token;
         
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
         }
       } catch (err) {
-        console.error("Could not parse auth token from localStorage", err);
+        console.error("Auth Token Parsing Error:", err);
       }
     }
 
@@ -40,35 +39,42 @@ apiClient.interceptors.request.use(
 
 /**
  * Response Interceptor
- * Handles global error cases like 401 Unauthorized or 403 Forbidden.
+ * Updated to handle specific 'Report' sync errors and Session Expiry.
  */
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    const { response } = error;
+    const { response, config } = error;
 
     if (response) {
-      // 401: Token expired or invalid
+      // 401: Unauthorized / Session Expired
       if (response.status === 401) {
-        console.warn("Session expired. Logging out...");
-        localStorage.removeItem('jobConnectUser');
-        // Avoid window.location.href if possible to prevent infinite loops, 
-        // but it's a solid fallback if not using a router-based logout.
-        // window.location.href = '/login'; 
+        console.warn("Session expired or invalid token. Redirecting to login...");
+        
+        // Only clear and redirect if we aren't already on the login page
+        if (!window.location.pathname.includes('/login')) {
+          localStorage.removeItem('jobConnectUser');
+          window.location.href = '/login?expired=true';
+        }
       }
 
-      // 403: Forbidden (Authenticated but not allowed)
+      // 403: Forbidden (Role Mismatch)
       if (response.status === 403) {
-        console.error("Access Denied: You do not have permission for this action.");
+        console.error("Access Denied: Employers only. Check your account permissions.");
       }
 
-      // 404: Route not found (Usually a backend vs frontend port issue)
+      // 404: Endpoint missing
       if (response.status === 404) {
-        console.error(`Route Not Found: ${error.config.url}. Check backend port (5000).`);
+        console.error(`API Error: The endpoint ${config.url} does not exist on Port 5000.`);
+      }
+
+      // 500: Server Error (Common during complex report generation)
+      if (response.status >= 500) {
+        console.error("Backend Server Error: The report could not be generated at this time.");
       }
     } else {
-      // Network Error (Backend server is down)
-      console.error("Network Error: Please check if your backend server is running on port 5000.");
+      // Network Error (Backend is likely offline)
+      console.error("Connection Refused: Ensure your Node.js/Express server is running.");
     }
 
     return Promise.reject(error);

@@ -17,7 +17,7 @@ import "./models/Job.js";
 import "./models/Interview.js";
 import Chat from "./models/Chat.js"; 
 
-// --- Loading my environment variables ---
+// --- Loading environment variables ---
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -53,7 +53,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// ---Importing Routes---
+// --- Importing Routes ---
 import jobseekerRoutes from "./routes/jobseekerRoutes.js";
 import employerRoutes from "./routes/employerRoutes.js";
 import jobRoutes from "./routes/jobRoutes.js";
@@ -107,23 +107,42 @@ const startServer = async () => {
       console.log("🔌 User connected:", socket.id);
 
       socket.on("join", (userId) => {
+        // Special Case: Administrators join a global admin room to see all employer help requests
+        if (userId === "admin") {
+          socket.join("admin_room");
+          console.log("Administrator joined the global admin room");
+        }
         socket.join(userId);
         console.log(`User ${userId} joined their private room`);
       });
+
       socket.on("send_message", async (msg) => {
         try {
           const { senderId, receiverId, message, senderType } = msg;
           const JobSeeker = mongoose.model("JobSeeker");
           const Employer = mongoose.model("Employer");
 
-          const SenderModel = senderType === "JobSeeker" ? JobSeeker : Employer;
-          const ReceiverModel = senderType === "JobSeeker" ? Employer : JobSeeker;
+          let sender, receiver;
 
-          const [sender, receiver] = await Promise.all([
-            SenderModel.findById(senderId).select("name companyName avatar"),
-            ReceiverModel.findById(receiverId).select("name companyName avatar")
-          ]);
+          // 1. Resolve Sender Info
+          if (senderType === "JobSeeker") {
+            sender = await JobSeeker.findById(senderId).select("name avatar");
+          } else if (senderType === "Employer") {
+            sender = await Employer.findById(senderId).select("companyName avatar");
+          } else if (senderType === "Admin") {
+            sender = { name: "System Admin", avatar: null };
+          }
 
+          // 2. Resolve Receiver Info (Admin vs User)
+          if (receiverId === "admin") {
+            receiver = { name: "Platform Admin", avatar: null };
+          } else {
+            // Check both collections to find the receiver
+            receiver = await Employer.findById(receiverId).select("companyName avatar") || 
+                       await JobSeeker.findById(receiverId).select("name avatar");
+          }
+
+          // 3. Persist Chat to Database
           const chat = new Chat({
             senderId,
             senderName: sender?.name || sender?.companyName || "Unknown",
@@ -132,10 +151,20 @@ const startServer = async () => {
             receiverName: receiver?.name || receiver?.companyName || "Unknown",
             receiverAvatar: receiver?.avatar || null,
             message,
+            timestamp: new Date(),
           });
 
           const savedMsg = await chat.save();
-          io.to(receiverId).emit("receive_message", savedMsg);
+
+          // 4. Real-time Emission
+          if (receiverId === "admin") {
+            // Route to all connected administrators
+            io.to("admin_room").emit("receive_message", savedMsg);
+          } else {
+            io.to(receiverId).emit("receive_message", savedMsg);
+          }
+          
+          // Emit back to sender to update their local UI state
           io.to(senderId).emit("receive_message", savedMsg);
 
         } catch (err) {
@@ -143,8 +172,10 @@ const startServer = async () => {
           socket.emit("error", { message: "Could not send message" });
         }
       });
+
       socket.on("typing", ({ receiverId, isTyping }) => {
-        socket.to(receiverId).emit("display_typing", { isTyping });
+        const target = receiverId === "admin" ? "admin_room" : receiverId;
+        socket.to(target).emit("display_typing", { isTyping });
       });
 
       socket.on("disconnect", () => {

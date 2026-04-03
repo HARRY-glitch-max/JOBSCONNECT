@@ -11,13 +11,26 @@ const employerSchema = new mongoose.Schema({
   },
   password: { type: String, required: true },
 
-  // 🔑 Reference to Admin
-  admin: { type: mongoose.Schema.Types.ObjectId, ref: "Admin" }
-});
+  // 🔑 Reference to Admin (Matches your existing structure)
+  admin: { type: mongoose.Schema.Types.ObjectId, ref: "Admin" },
+
+  // 🔔 NEW: Notification System for Reports
+  notifications: [
+    {
+      message: { type: String },
+      adminName: { type: String },
+      read: { type: Boolean, default: false },
+      createdAt: { type: Date, default: Date.now }
+    }
+  ],
+
+  // 📊 NEW: Metadata for report tracking
+  lastReportReceived: { type: Date }
+}, { timestamps: true });
 
 // ✅ Hash password before saving
-employerSchema.pre("save", async function () {
-  if (!this.isModified("password")) return;
+employerSchema.pre("save", async function (next) {
+  if (!this.isModified("password")) return next();
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
 });
@@ -27,8 +40,6 @@ employerSchema.methods.matchPassword = async function (enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
 };
 
-// ✅ Prevent OverwriteModelError
-const Employer =
-  mongoose.models.Employer || mongoose.model("Employer", employerSchema);
+const Employer = mongoose.models.Employer || mongoose.model("Employer", employerSchema);
 
 export default Employer;

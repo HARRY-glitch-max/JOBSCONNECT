@@ -2,17 +2,25 @@ import mongoose from "mongoose";
 
 const notificationSchema = new mongoose.Schema(
   {
-    // ✅ Standardized to JobSeeker (Uppercase S)
+    // The recipient of the notification (can be JobSeeker or Employer)
     userId: { 
       type: mongoose.Schema.Types.ObjectId, 
-      ref: "JobSeeker", 
       required: true 
+      // Removed strict 'ref' here to allow for both JobSeeker and Employer IDs
     },
     
-    // ✅ Added 'enum' to prevent random strings and help frontend filtering
     type: { 
       type: String, 
-      enum: ["interview", "interview_result", "application_status", "message"],
+      enum: [
+        "interview", 
+        "interview_result", 
+        "application_status", 
+        "message", 
+        "job_posting", 
+        "job_update", 
+        "job_delete",
+        "report" // ✅ Added for Admin -> Employer reporting
+      ],
       required: true 
     },
     
@@ -21,21 +29,22 @@ const notificationSchema = new mongoose.Schema(
       required: true 
     },
 
-    // ✅ Added 'isRead' so you can show a "Red Dot" on the bell icon
     isRead: { 
       type: Boolean, 
       default: false 
     },
 
-    // ✅ Added 'link' so the user can click the notification to go to the interview page
+    // Dynamic link to redirect the user (e.g., to a specific Job or Report page)
     link: { 
       type: String 
     }
   },
-  { timestamps: true } // Replaces 'date' field with createdAt and updatedAt
+  { timestamps: true }
 );
 
-// Prevent OverwriteModelError during development reloads
+// Indexing userId for faster notification fetching when the user logs in
+notificationSchema.index({ userId: 1, isRead: 1 });
+
 const Notification = mongoose.models.Notification || mongoose.model("Notification", notificationSchema);
 
 export default Notification;
