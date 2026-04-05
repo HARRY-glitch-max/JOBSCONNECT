@@ -1,20 +1,47 @@
 import User from "../models/Jobseeker.js";
 import generateToken from "../utils/generateToken.js";
 import { notifyJobseeker } from "../utils/notifyJobseeker.js";
+import axios from "axios"; // Added for Geolocation
 
 // =======================
 // Register jobseeker
 // =======================
 export const registerUser = async (req, res) => {
   try {
-    let { name, email, password } = req.body;
+    let { name, email, password, nationality } = req.body;
 
-    if (!name || !email || !password) {
-      return res.status(400).json({ message: "Please provide name, email, and password." });
+    // 1. BASIC VALIDATION
+    if (!name || !email || !password || !nationality) {
+      return res.status(400).json({ message: "Please provide all required fields including nationality." });
     }
 
     if (typeof email !== "string") {
       return res.status(400).json({ message: "Email must be a string." });
+    }
+
+    // 2. STRICTOR NATIONALITY CHECK
+    if (nationality.toLowerCase() !== 'kenyan') {
+      return res.status(403).json({ 
+        message: "JobsConnect is currently exclusive to Kenyan nationals." 
+      });
+    }
+
+    // 3. GEOLOCATION CHECK (Kenya Only)
+    const userIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+
+    // Enforce IP blocking only in production to allow local Windows development
+    if (process.env.NODE_ENV === 'production') {
+      try {
+        const geo = await axios.get(`http://ip-api.com/json/${userIp}`);
+        if (geo.data.status === "success" && geo.data.countryCode !== "KE") {
+          return res.status(403).json({ 
+            message: "Registration must be completed while physically located in Kenya." 
+          });
+        }
+      } catch (geoErr) {
+        console.error("Geo-verification failed:", geoErr.message);
+        // Optional: Decide if you want to block registration if the Geo API is down
+      }
     }
 
     email = email.toLowerCase();
@@ -24,7 +51,13 @@ export const registerUser = async (req, res) => {
       return res.status(400).json({ message: "User already exists." });
     }
 
-    const user = await User.create({ name, email, password });
+    // 4. CREATE USER
+    const user = await User.create({ 
+      name, 
+      email, 
+      password, 
+      nationality: "Kenyan" // Hardcoded to ensure data consistency
+    });
 
     res.status(201).json({
       _id: user._id,

@@ -5,16 +5,31 @@ const employerSchema = new mongoose.Schema({
   companyName: { type: String, required: true },
   industry: { type: String, required: true },
   contactInformation: {
-    email: { type: String, required: true },
+    email: { type: String, required: true, unique: true }, // Added unique for better integrity
     phone: { type: String },
     address: { type: String }
   },
   password: { type: String, required: true },
 
-  // 🔑 Reference to Admin (Matches your existing structure)
+  // 🇰🇪 NEW: Nationality Enforcement
+  // Set to required to match your new controller logic
+  nationality: { 
+    type: String, 
+    required: true, 
+    default: "Kenyan" 
+  },
+
+  // 📍 NEW: Registration Metadata
+  // Stores the country detected during registration for audit purposes
+  registrationLocation: {
+    country: { type: String, default: "Kenya" },
+    countryCode: { type: String, default: "KE" }
+  },
+
+  // 🔑 Reference to Admin
   admin: { type: mongoose.Schema.Types.ObjectId, ref: "Admin" },
 
-  // 🔔 NEW: Notification System for Reports
+  // 🔔 Notification System for Reports
   notifications: [
     {
       message: { type: String },
@@ -24,7 +39,7 @@ const employerSchema = new mongoose.Schema({
     }
   ],
 
-  // 📊 NEW: Metadata for report tracking
+  // 📊 Metadata for report tracking
   lastReportReceived: { type: Date }
 }, { timestamps: true });
 
@@ -40,6 +55,7 @@ employerSchema.methods.matchPassword = async function (enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
 };
 
+// Handle potential model overwrite issues in development
 const Employer = mongoose.models.Employer || mongoose.model("Employer", employerSchema);
 
 export default Employer;

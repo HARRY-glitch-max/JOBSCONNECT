@@ -1,11 +1,10 @@
-import { Routes, Route, NavLink, useNavigate } from "react-router-dom";
+import { Routes, Route, NavLink, useNavigate, useLocation } from "react-router-dom"; 
 import { useContext, useState, useEffect, useCallback } from "react"; 
 import apiClient from "../api/client"; 
 
 // Sub-Pages
 import Jobs from "./Jobs";
 import MyApplications from "./MyApplications";
-// ✅ Import the unified Messages component
 import Messages from "./Messages"; 
 import JobseekerProfile from "./JobseekerProfile";
 import JobseekerNotifications from "./JobseekerNotifications";
@@ -24,12 +23,13 @@ import {
   LayoutDashboard 
 } from "lucide-react";
 
+// Updated NavItem to handle absolute paths correctly
 const NavItem = ({ to, label, icon: Icon, badgeCount }) => (
   <li>
     <NavLink
-      to={to}
+      to={`/jobseeker/dashboard/${to}`} // Absolute pathing prevents nesting
       className={({ isActive }) =>
-        `flex items-center justify-between p-3 rounded-xl transition-all duration-200 ${
+        `flex items-center justify-between p-3.5 rounded-xl transition-all duration-200 group ${
           isActive
             ? "bg-blue-600 text-white shadow-lg shadow-blue-200"
             : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
@@ -37,8 +37,8 @@ const NavItem = ({ to, label, icon: Icon, badgeCount }) => (
       }
     >
       <div className="flex items-center space-x-3">
-        <Icon size={20} />
-        <span className="font-semibold text-sm tracking-tight">{label}</span>
+        <Icon size={20} className="group-hover:scale-110 transition-transform" />
+        <span className="font-bold text-sm tracking-tight">{label}</span>
       </div>
       {badgeCount > 0 && (
         <span className="bg-red-500 text-white text-[10px] font-black px-2 py-1 rounded-full border-2 border-white shadow-sm">
@@ -51,19 +51,20 @@ const NavItem = ({ to, label, icon: Icon, badgeCount }) => (
 
 export default function JobseekerDashboard() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, logout } = useContext(AuthContext);
+  
   const [unreadCount, setUnreadCount] = useState(0);
   const [interviewCount, setInterviewCount] = useState(0);
   const [messageCount, setMessageCount] = useState(0); 
 
+  // --- DATA FETCHING ---
   const fetchUnreadCount = useCallback(async () => {
     if (!user?._id) return;
     try {
       const { data } = await apiClient.get(`/notifications/user/${user._id}`);
       setUnreadCount(Array.isArray(data) ? data.filter(n => !n.isRead).length : 0);
-    } catch (err) { 
-      console.error("Unread fetch error:", err.message); 
-    }
+    } catch (err) { console.error("Unread fetch error:", err.message); }
   }, [user?._id]);
 
   const fetchInterviewCount = useCallback(async () => {
@@ -71,9 +72,7 @@ export default function JobseekerDashboard() {
     try {
       const { data } = await apiClient.get(`/interviews/user/${user._id}`);
       setInterviewCount(Array.isArray(data) ? data.length : 0);
-    } catch (err) { 
-      console.error("Interview fetch error:", err.message); 
-    }
+    } catch (err) { console.error("Interview fetch error:", err.message); }
   }, [user?._id]);
 
   const fetchMessageCount = useCallback(async () => {
@@ -81,9 +80,7 @@ export default function JobseekerDashboard() {
     try {
       const { data } = await apiClient.get(`/chats/user/${user._id}`);
       setMessageCount(Array.isArray(data) ? data.length : 0); 
-    } catch (err) { 
-      console.error("Message fetch error:", err.message); 
-    }
+    } catch (err) { console.error("Message fetch error:", err.message); }
   }, [user?._id]);
 
   useEffect(() => {
@@ -91,7 +88,6 @@ export default function JobseekerDashboard() {
       fetchUnreadCount();
       fetchInterviewCount();
       fetchMessageCount();
-
       const interval = setInterval(() => {
           fetchUnreadCount();
           fetchInterviewCount();
@@ -100,6 +96,9 @@ export default function JobseekerDashboard() {
       return () => clearInterval(interval);
     }
   }, [user?._id, fetchUnreadCount, fetchInterviewCount, fetchMessageCount]);
+
+  // Absolute navigation helper
+  const goTo = (path) => navigate(`/jobseeker/dashboard/${path}`);
 
   return (
     <div className="flex min-h-screen bg-slate-50 font-sans antialiased overflow-hidden">
@@ -116,7 +115,6 @@ export default function JobseekerDashboard() {
             <NavItem to="applications" label="My Applications" icon={FileText} />
             <NavItem to="interviews" label="Interviews" icon={Calendar} badgeCount={interviewCount} />
             <NavItem to="notifications" label="Notifications" icon={Bell} badgeCount={unreadCount} />
-            {/* ✅ Updated Link to matches nested route */}
             <NavItem to="messages" label="Messages" icon={Mail} badgeCount={messageCount} />
             <NavItem to="profile" label="Profile" icon={User} />
           </ul>
@@ -136,7 +134,7 @@ export default function JobseekerDashboard() {
           </div>
           <Button
             onClick={logout}
-            className="w-full bg-slate-50 border border-slate-200 text-slate-600 hover:bg-red-50 hover:text-red-600 hover:border-red-100 transition-all py-3 rounded-xl font-bold flex items-center justify-center gap-2"
+            className="w-full bg-slate-50 border border-slate-200 text-slate-600 hover:bg-red-50 hover:text-red-600 transition-all py-3 rounded-xl font-bold flex items-center justify-center gap-2"
           >
             <LogOut size={18} /> Sign Out
           </Button>
@@ -156,7 +154,7 @@ export default function JobseekerDashboard() {
               </p>
             </div>
             
-            <button onClick={() => navigate("notifications")} className="p-3.5 bg-white border border-slate-200 rounded-2xl text-slate-600 relative group active:scale-95 transition-all shadow-sm">
+            <button onClick={() => goTo("notifications")} className="p-3.5 bg-white border border-slate-200 rounded-2xl text-slate-600 relative group active:scale-95 transition-all shadow-sm">
               <Bell size={26} className="group-hover:rotate-12 transition-transform" />
               {unreadCount > 0 && (
                 <span className="absolute -top-1 -right-1 w-6 h-6 bg-red-500 text-white text-[11px] font-black flex items-center justify-center rounded-full border-2 border-white shadow-sm">
@@ -166,19 +164,19 @@ export default function JobseekerDashboard() {
             </button>
           </header>
 
-          {/* Stats Dashboard */}
+          {/* Stats Dashboard Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-              <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all group" onClick={() => navigate("applications")}>
+              <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all group" onClick={() => goTo("applications")}>
                   <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-blue-600 group-hover:text-white transition-colors"><FileText size={24} /></div>
                   <p className="text-sm text-slate-500 font-bold uppercase tracking-wider">Applications</p>
                   <h3 className="text-3xl font-black text-slate-900 mt-1">12</h3>
               </div>
-              <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all group" onClick={() => navigate("interviews")}>
+              <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all group" onClick={() => goTo("interviews")}>
                   <div className="w-12 h-12 bg-orange-50 text-orange-600 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-orange-500 group-hover:text-white transition-colors"><Calendar size={24} /></div>
                   <p className="text-sm text-slate-500 font-bold uppercase tracking-wider">Interviews</p>
                   <h3 className="text-3xl font-black text-slate-900 mt-1">{interviewCount}</h3>
               </div>
-              <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all group" onClick={() => navigate("messages")}>
+              <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all group" onClick={() => goTo("messages")}>
                   <div className="w-12 h-12 bg-green-50 text-green-600 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-green-600 group-hover:text-white transition-colors"><Mail size={24} /></div>
                   <p className="text-sm text-slate-500 font-bold uppercase tracking-wider">Active Chats</p>
                   <h3 className="text-3xl font-black text-slate-900 mt-1">{messageCount}</h3>
@@ -194,10 +192,7 @@ export default function JobseekerDashboard() {
             <Routes>
               <Route path="jobs" element={<div className="p-10"><Jobs /></div>} />
               <Route path="applications" element={<div className="p-10"><MyApplications /></div>} />
-              
-              {/* ✅ CLEANED MESSAGES ROUTE: Uses the unified Messages.jsx */}
               <Route path="messages" element={<Messages />} />
-              
               <Route path="profile" element={<div className="p-10"><JobseekerProfile /></div>} />
               <Route path="notifications" element={<div className="p-10"><JobseekerNotifications refreshBadge={fetchUnreadCount} /></div>} />
               <Route path="interviews" element={<div className="p-10"><JobseekerInterviews /></div>} />
@@ -211,7 +206,7 @@ export default function JobseekerDashboard() {
                    <p className="text-slate-500 mt-3 mb-10 text-lg max-w-md mx-auto leading-relaxed">
                      Track applications, manage interviews, and chat with employers in one place.
                    </p>
-                   <Button onClick={() => navigate("jobs")} className="bg-blue-600 text-white px-12 py-4 rounded-2xl font-black shadow-lg shadow-blue-200 hover:scale-105 active:scale-95 transition-all">
+                   <Button onClick={() => goTo("jobs")} className="bg-blue-600 text-white px-12 py-4 rounded-2xl font-black shadow-lg shadow-blue-200 hover:scale-105 active:scale-95 transition-all">
                      Explore Opportunities
                    </Button>
                 </div>

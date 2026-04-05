@@ -5,8 +5,27 @@ const jobseekerSchema = new mongoose.Schema(
   {
     // Core identity fields
     name: { type: String, required: true },
-    email: { type: String, required: true, unique: true },
+    email: { 
+      type: String, 
+      required: true, 
+      unique: true, 
+      lowercase: true // Ensures emails are always stored in lowercase
+    },
     password: { type: String, required: true },
+
+    // 🇰🇪 NEW: Nationality Enforcement
+    nationality: { 
+      type: String, 
+      required: true, 
+      default: "Kenyan" 
+    },
+
+    // 📍 NEW: Registration Metadata
+    // Tracks the location data from the IP check for audit purposes
+    registrationLocation: {
+      country: { type: String, default: "Kenya" },
+      countryCode: { type: String, default: "KE" }
+    },
 
     // Optional profile fields
     bio: { type: String },

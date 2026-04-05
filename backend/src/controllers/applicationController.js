@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import Application from "../models/Application.js";
 import Notification from "../models/Notification.js";
 import Job from "../models/Job.js";
+import Jobseeker from "../models/Jobseeker.js"; 
 import { notifyJobseeker } from "../utils/notifyJobseeker.js";
 import { v2 as cloudinary } from "cloudinary";
 
@@ -31,7 +32,7 @@ export const checkApplicationStatus = async (req, res) => {
 // --- 1. Submit a new application ---
 export const createApplication = async (req, res) => {
   try {
-    const { jobId, userId } = req.body;
+    const { jobId, userId, skills, bio } = req.body;
 
     const existingApp = await Application.findOne({ jobId, userId });
     if (existingApp) {
@@ -42,9 +43,14 @@ export const createApplication = async (req, res) => {
       return res.status(400).json({ message: "Please upload your resume (PDF/DOCX)" });
     }
 
+    if (!skills || !bio) {
+      return res.status(400).json({ message: "Please provide both your skills and a short bio." });
+    }
+
     const job = await Job.findById(jobId).select("employerId title");
     if (!job) return res.status(404).json({ message: "Job not found" });
 
+    // Cloudinary Upload
     const result = await new Promise((resolve, reject) => {
       const stream = cloudinary.uploader.upload_stream(
         { folder: "resumes", resource_type: "raw" },
@@ -58,9 +64,14 @@ export const createApplication = async (req, res) => {
       userId,
       employerId: job.employerId,
       resume: result.secure_url,
+      skills: Array.isArray(skills) ? skills : skills.split(",").map(s => s.trim()),
+      bio,
     });
 
     await newApp.save();
+
+    // Update Jobseeker profile snapshot
+    await Jobseeker.findByIdAndUpdate(userId, { bio, skills: newApp.skills });
 
     const application = await Application.findById(newApp._id)
       .populate("userId", "name email avatar")
@@ -81,7 +92,7 @@ export const createApplication = async (req, res) => {
   }
 };
 
-// --- 2. Update application status (General) ---
+// --- 2. Update application status ---
 export const updateApplicationStatus = async (req, res) => {
   try {
     const { id } = req.params;
@@ -105,7 +116,7 @@ export const updateApplicationStatus = async (req, res) => {
   }
 };
 
-// --- 3. Shortlist candidate (Specific for Employer Routes) ---
+// --- 3. Shortlist candidate (FIX: Restored missing export) ---
 export const shortlistCandidate = async (req, res) => {
   try {
     const { id } = req.params;
@@ -127,19 +138,20 @@ export const shortlistCandidate = async (req, res) => {
 
     res.json({ message: "Candidate shortlisted", application });
   } catch (error) {
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Server error while shortlisting" });
   }
 };
 
-// --- 4. Get application by ID (Fixes the current crash) ---
+// --- 4. Get application by ID (Detailed View) ---
 export const getApplicationById = async (req, res) => {
   try {
     const application = await Application.findById(req.params.id)
-      .populate("userId", "name email avatar")
+      .populate("userId", "name email avatar bio skills") 
       .populate({
         path: "jobId",
         populate: { path: "employerId", select: "companyName avatar" }
       });
+    
     if (!application) return res.status(404).json({ message: "Application not found" });
     res.json(application);
   } catch (error) {
@@ -147,7 +159,7 @@ export const getApplicationById = async (req, res) => {
   }
 };
 
-// --- 5. Get applications by User (Jobseeker Dashboard) ---
+// --- 5. Get applications by User (Jobseeker Side) ---
 export const getApplicationsByUser = async (req, res) => {
   try {
     const applications = await Application.find({ userId: req.params.userId })
@@ -155,29 +167,24 @@ export const getApplicationsByUser = async (req, res) => {
       .populate({
         path: "jobId",
         select: "title employerId",
-        populate: { 
-          path: "employerId", 
-          select: "companyName avatar _id" 
-        }
+        populate: { path: "employerId", select: "companyName avatar _id" }
       });
     res.json(applications);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
+  } catch (error) { res.status(500).json({ message: error.message }); }
 };
 
-// --- 6. Get applications by Employer (Employer Dashboard) ---
+// --- 6. Get applications by Employer (Talent Pipeline View) ---
 export const getApplicationsByEmployer = async (req, res) => {
   try {
     const { employerId } = req.params;
     const applications = await Application.find({ employerId })
       .sort({ createdAt: -1 })
-      .populate("userId", "name email avatar")
+      .populate("userId", "name email avatar bio skills") 
       .populate("jobId", "title location type");
 
     res.status(200).json(applications);
   } catch (error) {
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Server error fetching pipeline" });
   }
 };
 
@@ -185,18 +192,16 @@ export const getApplicationsByEmployer = async (req, res) => {
 export const getApplicationsByJob = async (req, res) => {
   try {
     const applications = await Application.find({ jobId: req.params.jobId })
-      .populate("userId", "name email avatar");
+      .populate("userId", "name email avatar bio skills");
     res.json(applications);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
+  } catch (error) { res.status(500).json({ message: error.message }); }
 };
 
-// --- 8. Get ALL applications (Global Admin/Stats) ---
+// --- 8. Admin: Get ALL applications (FIX: Restored missing export) ---
 export const getApplications = async (req, res) => {
   try {
     const applications = await Application.find()
-      .populate("userId", "name email")
+      .populate("userId", "name email bio skills")
       .populate("jobId", "title");
     res.json(applications);
   } catch (error) {
@@ -210,7 +215,5 @@ export const deleteApplication = async (req, res) => {
     const application = await Application.findByIdAndDelete(req.params.id);
     if (!application) return res.status(404).json({ message: "Application not found" });
     res.json({ message: "Application deleted" });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
+  } catch (error) { res.status(500).json({ message: error.message }); }
 };

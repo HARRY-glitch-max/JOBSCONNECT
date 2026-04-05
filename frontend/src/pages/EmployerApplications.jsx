@@ -2,20 +2,10 @@ import React, { useEffect, useState, useContext } from "react";
 import { useNavigate } from "react-router-dom";
 import { AuthContext } from "../contexts/AuthContext";
 import { 
-  FileText, 
-  MessageSquare, 
-  User, 
-  Briefcase,
-  Loader2,
-  AlertCircle,
-  CheckCircle2, 
-  XCircle,
-  Calendar
+  FileText, MessageSquare, User, Briefcase, Loader2,
+  AlertCircle, CheckCircle2, XCircle, Calendar, X, ExternalLink
 } from "lucide-react";
-import {
-  getEmployerApplications,
-  updateApplicationStatus,
-} from "../api/applications";
+import { getEmployerApplications, updateApplicationStatus } from "../api/applications";
 import StatusBadge from "../components/applications/StatusBadge";
 
 const EmployerApplications = () => {
@@ -26,6 +16,9 @@ const EmployerApplications = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [count, setCount] = useState(0);
+  
+  // State for the Bio/Skills Modal
+  const [selectedCandidate, setSelectedCandidate] = useState(null);
 
   const fetchApps = async () => {
     if (!user?.employerId) {
@@ -33,7 +26,6 @@ const EmployerApplications = () => {
       setLoading(false);
       return;
     }
-
     try {
       setLoading(true);
       const data = await getEmployerApplications(user.employerId);
@@ -54,28 +46,17 @@ const EmployerApplications = () => {
     try {
       await updateApplicationStatus(appId, newStatus);
       setApps((prev) =>
-        prev.map((app) =>
-          app._id === appId ? { ...app, status: newStatus } : app
-        )
+        prev.map((app) => app._id === appId ? { ...app, status: newStatus } : app)
       );
     } catch (err) {
-      alert(`Failed to update status to ${newStatus}. Please try again.`);
+      alert(`Failed to update status to ${newStatus}.`);
     }
   };
 
-  /**
-   * ✅ STABLE NAVIGATION
-   * Uses an absolute path to ensure the chat opens correctly regardless of route depth.
-   */
   const handleMessage = (app) => {
     if (!app?.userId?._id) return;
-    
-    // Using absolute path for the employer dashboard context
     navigate(`/employer/dashboard/chat/${app.userId._id}`, {
-      state: { 
-        receiverName: app.userId.name,
-        jobTitle: app.jobId?.title 
-      },
+      state: { receiverName: app.userId.name, jobTitle: app.jobId?.title },
     });
   };
 
@@ -87,13 +68,11 @@ const EmployerApplications = () => {
   );
 
   return (
-    <div className="max-w-7xl mx-auto px-8 py-10">
+    <div className="max-w-7xl mx-auto px-8 py-10 relative">
       <header className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-6">
         <div>
           <h1 className="text-4xl font-black text-slate-900 tracking-tight mb-2">Talent Pipeline</h1>
-          <p className="text-slate-500 font-medium max-w-md">
-            Manage your incoming applications, shortlist top talent, and communicate with candidates.
-          </p>
+          <p className="text-slate-500 font-medium max-w-md">Manage your incoming applications and shortlist top talent.</p>
         </div>
         <div className="bg-blue-600 px-8 py-4 rounded-3xl shadow-xl shadow-blue-200 flex items-center gap-4 text-white">
           <span className="font-black text-3xl">{count}</span>
@@ -107,7 +86,7 @@ const EmployerApplications = () => {
           <AlertCircle size={20} /> {error}
         </div>
       ) : apps.length > 0 ? (
-        <div className="bg-white rounded-[2.5rem] shadow-2xl shadow-slate-200/40 border border-slate-100 overflow-hidden transition-all duration-500">
+        <div className="bg-white rounded-[2.5rem] shadow-2xl shadow-slate-200/40 border border-slate-100 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
@@ -124,7 +103,7 @@ const EmployerApplications = () => {
                   <tr key={app._id} className="hover:bg-blue-50/20 transition-all group">
                     <td className="px-8 py-6">
                       <div className="flex items-center gap-4">
-                        <div className="p-3 bg-slate-100 rounded-2xl text-slate-500 group-hover:bg-blue-100 group-hover:text-blue-600 transition-all duration-300">
+                        <div className="p-3 bg-slate-100 rounded-2xl text-slate-500 group-hover:bg-blue-100 group-hover:text-blue-600 transition-all">
                           <Briefcase size={20} />
                         </div>
                         <span className="font-extrabold text-slate-900">{app.jobId?.title || "General Role"}</span>
@@ -132,25 +111,33 @@ const EmployerApplications = () => {
                     </td>
 
                     <td className="px-8 py-6">
-                      <div className="flex flex-col gap-0.5">
-                        <span className="font-black text-slate-900 text-sm">{app.userId?.name || "Anonymous"}</span>
-                        <span className="text-xs text-slate-400 font-medium italic">{app.userId?.email}</span>
+                      <div 
+                        className="flex flex-col gap-1 cursor-pointer group/name" 
+                        onClick={() => setSelectedCandidate({ ...app.userId, appBio: app.bio, appSkills: app.skills })}
+                      >
+                        <span className="font-black text-slate-900 text-sm group-hover/name:text-blue-600 flex items-center gap-1.5 transition-colors">
+                          {app.userId?.name || "Anonymous"} 
+                          <ExternalLink size={12} className="opacity-0 group-hover/name:opacity-100 text-blue-600" />
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">{app.userId?.email}</span>
+                        
+                        {/* QUICK SKILLS PREVIEW */}
+                        <div className="flex gap-1 flex-wrap mt-1">
+                          {(app.userId?.skills || app.skills || []).slice(0, 2).map((s, i) => (
+                            <span key={i} className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-md uppercase font-black group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">
+                              {s}
+                            </span>
+                          ))}
+                        </div>
                       </div>
                     </td>
 
                     <td className="px-8 py-6">
                       {app.resume ? (
-                        <a
-                          href={app.resume}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-2 text-blue-600 font-black text-[11px] uppercase tracking-wider hover:text-blue-800 hover:underline transition-all"
-                        >
+                        <a href={app.resume} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-blue-600 font-black text-[11px] uppercase tracking-wider hover:underline">
                           <FileText size={16} strokeWidth={2.5} /> View Portfolio/CV
                         </a>
-                      ) : (
-                        <span className="text-slate-300 italic text-xs">Not Provided</span>
-                      )}
+                      ) : <span className="text-slate-300 italic text-xs">Not Provided</span>}
                     </td>
 
                     <td className="px-8 py-6">
@@ -159,38 +146,18 @@ const EmployerApplications = () => {
 
                     <td className="px-8 py-6">
                       <div className="flex items-center justify-center gap-3">
-                        <button
-                          onClick={() => handleReview(app._id, "shortlisted")}
-                          className="p-2.5 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all"
-                          title="Shortlist Candidate"
-                        >
+                        <button onClick={() => handleReview(app._id, "shortlisted")} className="p-2.5 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all" title="Shortlist Candidate">
                           <CheckCircle2 size={22} />
                         </button>
-
-                        <button
-                          onClick={() => handleReview(app._id, "rejected")}
-                          className="p-2.5 text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
-                          title="Reject Candidate"
-                        >
+                        <button onClick={() => handleReview(app._id, "rejected")} className="p-2.5 text-rose-500 hover:bg-rose-50 rounded-xl transition-all" title="Reject Candidate">
                           <XCircle size={22} />
                         </button>
-
                         <div className="w-[1px] h-6 bg-slate-100 mx-1"></div>
-
-                        <button
-                          onClick={() => handleReview(app._id, "interview")}
-                          className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white rounded-xl font-bold text-[11px] uppercase tracking-widest hover:bg-blue-600 transition-all shadow-sm active:scale-95"
-                        >
-                          <Calendar size={14} /> Schedule
+                        <button onClick={() => handleReview(app._id, "interview")} className="px-5 py-2.5 bg-slate-900 text-white rounded-xl font-bold text-[11px] uppercase tracking-widest hover:bg-blue-600 transition-all shadow-sm">
+                          Schedule
                         </button>
-
-                        <button
-                          onClick={() => handleMessage(app)}
-                          className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all shadow-sm"
-                          title="Message Candidate"
-                        >
-                          <MessageSquare size={18} fill="currentColor" className="opacity-20 group-hover:opacity-0" />
-                          <MessageSquare size={18} className="absolute inset-0 m-auto" />
+                        <button onClick={() => handleMessage(app)} className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all shadow-sm" title="Message Candidate">
+                          <MessageSquare size={18} />
                         </button>
                       </div>
                     </td>
@@ -202,13 +169,65 @@ const EmployerApplications = () => {
         </div>
       ) : (
         <div className="text-center py-40 bg-white rounded-[3rem] border-2 border-dashed border-slate-200">
-          <div className="w-24 h-24 bg-slate-50 rounded-[2.5rem] flex items-center justify-center mx-auto mb-8 text-slate-200">
-            <User size={48} />
-          </div>
+          <div className="w-24 h-24 bg-slate-50 rounded-[2.5rem] flex items-center justify-center mx-auto mb-8 text-slate-200"><User size={48} /></div>
           <h3 className="text-2xl font-black text-slate-900 mb-2">The pipeline is quiet...</h3>
-          <p className="text-slate-500 font-medium max-w-xs mx-auto">
-            As soon as candidates start applying to your jobs, they'll appear here for review.
-          </p>
+        </div>
+      )}
+
+      {/* --- QUICK VIEW MODAL --- */}
+      {selectedCandidate && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-6">
+          <div className="bg-white w-full max-w-xl rounded-[3rem] p-10 shadow-2xl border border-slate-100 animate-in fade-in zoom-in duration-300">
+            <div className="flex justify-between items-start mb-8">
+              <div>
+                <h2 className="text-3xl font-black text-slate-900 tracking-tight">{selectedCandidate.name}</h2>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg">Jobseeker</span>
+                  <span className="text-slate-400 font-bold text-xs">{selectedCandidate.email}</span>
+                </div>
+              </div>
+              <button onClick={() => setSelectedCandidate(null)} className="p-3 bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-500 rounded-2xl transition-all">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-8">
+              <div>
+                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                  <FileText size={12} className="text-blue-600" /> Professional Bio
+                </h4>
+                <p className="text-slate-600 text-[15px] leading-relaxed font-medium italic bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
+                  "{selectedCandidate.bio || selectedCandidate.appBio || 'Candidate has not provided a bio yet.'}"
+                </p>
+              </div>
+
+              <div>
+                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                  <CheckCircle2 size={12} className="text-blue-600" /> Technical Skills
+                </h4>
+                <div className="flex flex-wrap gap-2.5">
+                  {(selectedCandidate.skills?.length > 0 ? selectedCandidate.skills : (selectedCandidate.appSkills || [])).length > 0 ? (
+                    (selectedCandidate.skills?.length > 0 ? selectedCandidate.skills : selectedCandidate.appSkills).map((skill, i) => (
+                      <span key={i} className="px-4 py-2 bg-blue-50 text-blue-600 text-xs font-extrabold rounded-xl border border-blue-100 shadow-sm">
+                        {skill}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-slate-400 italic text-sm">No skills listed.</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-10 pt-8 border-t border-slate-100">
+              <button 
+                onClick={() => setSelectedCandidate(null)}
+                className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-[0.2em] text-xs hover:bg-blue-600 transition-all shadow-lg shadow-slate-200"
+              >
+                Close Profile
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
