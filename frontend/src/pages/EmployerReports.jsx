@@ -14,12 +14,12 @@ export default function EmployerReports() {
     const fetchReport = async () => {
       try {
         setLoading(true);
-        // This endpoint fetches the latest metrics for the logged-in employer
-        const { data } = await apiClient.get("/employers/reports");
+        // ✅ Updated to hit the 'latest' endpoint we created in the routes
+        const { data } = await apiClient.get("/reports/latest");
         setReportData(data);
       } catch (err) {
         console.error("Error fetching reports:", err);
-        setError("Failed to load recruitment analytics.");
+        setError("No analytics reports found. Please wait for an Admin sync.");
       } finally {
         setLoading(false);
       }
@@ -40,11 +40,14 @@ export default function EmployerReports() {
 
   if (error) {
     return (
-      <div className="p-8 text-center">
+      <div className="p-8 text-center bg-rose-50 rounded-3xl m-8">
         <p className="text-rose-500 font-semibold">{error}</p>
       </div>
     );
   }
+
+  // ✅ Destructure metrics for cleaner UI mapping
+  const { metrics, generatedAt } = reportData;
 
   return (
     <div className="p-8 max-w-7xl mx-auto animate-in fade-in duration-500">
@@ -61,11 +64,11 @@ export default function EmployerReports() {
           </p>
         </div>
         
-        {reportData?.lastUpdated && (
+        {generatedAt && (
           <div className="flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-2xl border border-slate-200">
             <Clock size={14} className="text-slate-400" />
             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-              Updated: {new Date(reportData.lastUpdated).toLocaleString()}
+              Last Synced: {new Date(generatedAt).toLocaleString()}
             </span>
           </div>
         )}
@@ -74,7 +77,7 @@ export default function EmployerReports() {
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         
-        {/* Jobs Metric */}
+        {/* Jobs Metric - Updated Mapping */}
         <div className="group bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
           <div className="flex justify-between items-start mb-6">
             <div className="bg-blue-50 w-14 h-14 rounded-2xl flex items-center justify-center text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
@@ -84,12 +87,11 @@ export default function EmployerReports() {
           </div>
           <h3 className="text-slate-400 font-bold text-xs uppercase tracking-widest">Active Listings</h3>
           <div className="flex items-baseline gap-2 mt-2">
-            <p className="text-5xl font-black text-slate-900">{reportData?.jobs?.active || 0}</p>
-            <span className="text-slate-400 font-bold text-sm">/ {reportData?.jobs?.total || 0} Total</span>
+            <p className="text-5xl font-black text-slate-900">{metrics?.activeListings || 0}</p>
           </div>
         </div>
 
-        {/* Candidates Metric */}
+        {/* Candidates Metric - Updated Mapping */}
         <div className="group bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
           <div className="flex justify-between items-start mb-6">
             <div className="bg-indigo-50 w-14 h-14 rounded-2xl flex items-center justify-center text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
@@ -98,15 +100,15 @@ export default function EmployerReports() {
             <ArrowUpRight size={20} className="text-slate-300" />
           </div>
           <h3 className="text-slate-400 font-bold text-xs uppercase tracking-widest">Total Applicants</h3>
-          <p className="text-5xl font-black text-slate-900 mt-2">{reportData?.applications?.total || 0}</p>
+          <p className="text-5xl font-black text-slate-900 mt-2">{metrics?.totalApplications || 0}</p>
           <div className="mt-4 flex gap-2">
             <span className="text-[10px] bg-green-50 text-green-700 px-2 py-1 rounded-lg font-bold uppercase">
-              {reportData?.applications?.shortlisted || 0} Shortlisted
+              {metrics?.shortlisted || 0} Shortlisted
             </span>
           </div>
         </div>
 
-        {/* Interviews Metric */}
+        {/* Interviews Metric - Updated Mapping */}
         <div className="group bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
           <div className="flex justify-between items-start mb-6">
             <div className="bg-rose-50 w-14 h-14 rounded-2xl flex items-center justify-center text-rose-600 group-hover:bg-rose-600 group-hover:text-white transition-colors">
@@ -115,16 +117,23 @@ export default function EmployerReports() {
             <ArrowUpRight size={20} className="text-slate-300" />
           </div>
           <h3 className="text-slate-400 font-bold text-xs uppercase tracking-widest">Interviews</h3>
-          <p className="text-5xl font-black text-slate-900 mt-2">{reportData?.interviews?.total || 0}</p>
+          <p className="text-5xl font-black text-slate-900 mt-2">{metrics?.totalInterviews || 0}</p>
           <div className="mt-4 flex items-center gap-2 text-green-600">
             <CheckCircle size={14} />
             <span className="text-[10px] font-bold uppercase tracking-wider">
-              {reportData?.interviews?.completed || 0} Successfully Completed
+               {metrics?.hires || 0} Successfully Hired
             </span>
           </div>
         </div>
-
       </div>
+
+      {/* Admin Notes Section (New) */}
+      {reportData?.adminNotes && (
+        <div className="mt-8 p-6 bg-slate-50 border-l-4 border-blue-600 rounded-r-2xl">
+          <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Admin Feedback</h4>
+          <p className="text-slate-700 italic">"{reportData.adminNotes}"</p>
+        </div>
+      )}
 
       {/* Helpful Note */}
       <div className="mt-12 p-6 bg-blue-900 rounded-[2rem] text-white flex items-center justify-between">

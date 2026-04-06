@@ -4,13 +4,13 @@ import { AnimatePresence } from "framer-motion";
 import { 
   LayoutDashboard, FileText, Users, Calendar, 
   ArrowRight, UserCircle, Send, LogOut, ShieldCheck,
-  Activity, Settings
+  Activity, Settings, RefreshCcw
 } from "lucide-react";
 
 import Button from "../components/ui/Button";
 import PageTransition from "../components/PageTransition";
 import { AuthContext } from "../contexts/AuthContext";
-import { getAdminReports, generateNewReport } from "../api/admin";
+import apiClient from "../api/client"; // ✅ Use your updated apiClient
 import AdminReports from "./AdminReports";
 
 export default function AdminDashboard() {
@@ -27,13 +27,13 @@ export default function AdminDashboard() {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState(null);
 
-  // Absolute navigation helper
   const goTo = (path) => navigate(`/admin/dashboard/${path}`);
 
+  // ✅ Fetch live overview metrics
   const fetchStats = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await getAdminReports();
+      const { data } = await apiClient.get("/admin/reports");
       if (data) setStats(data);
       setError(null);
     } catch (err) {
@@ -48,14 +48,25 @@ export default function AdminDashboard() {
     if (user) fetchStats();
   }, [user, fetchStats]);
 
+  // ✅ Trigger the Sync Logic
   const handleSendReport = async () => {
+    // Determine the employer ID from the user context
+    const employerId = user?.employerId?._id || user?.employerId;
     const companyName = user?.employerId?.companyName || "the Organization";
+
+    if (!employerId) {
+      alert("Error: No employer linked to this administrative account.");
+      return;
+    }
+
     if (!window.confirm(`Generate a real-time status report and notify ${companyName}?`)) return;
     
     setGenerating(true);
     try {
-      await generateNewReport();
-      alert("Success! The report has been sent to the employer's notification center.");
+      // ✅ Hits the POST /api/reports/generate route
+      await apiClient.post("/reports/generate", { employerId });
+      alert(`Success! Real-time analytics have been pushed to ${companyName}.`);
+      fetchStats(); // Refresh stats after sync
     } catch (err) {
       alert("Action Failed: " + (err.response?.data?.message || err.message));
     } finally {
@@ -99,7 +110,6 @@ export default function AdminDashboard() {
         <AnimatePresence mode="wait">
           <Routes location={location} key={location.pathname}>
             
-            {/* Main Stats and Action Overview */}
             <Route path="/" element={
               <PageTransition>
                 {error && (
@@ -147,7 +157,6 @@ export default function AdminDashboard() {
               </PageTransition>
             } />
 
-            {/* Reports Route */}
             <Route path="reports" element={
               <PageTransition>
                 <div className="bg-white p-10 rounded-[3rem] shadow-xl shadow-slate-200/50 border border-slate-100 min-h-[600px]">
@@ -159,7 +168,6 @@ export default function AdminDashboard() {
               </PageTransition>
             } />
 
-            {/* Profile/Settings Route */}
             <Route path="profile" element={
               <PageTransition>
                 <div className="bg-white p-10 rounded-[3rem] shadow-xl shadow-slate-200/50 border border-slate-100 min-h-[600px]">
@@ -222,15 +230,18 @@ function ActionCard({ title, desc, icon, color, btnText, onClick, isLoading }) {
         <p className="text-slate-500 mb-10 leading-relaxed font-medium text-sm italic opacity-80">{desc}</p>
       </div>
       <Button 
-        className={`w-full h-14 rounded-2xl justify-between px-7 transition-all shadow-lg active:scale-95 ${
+        className={`w-full h-14 rounded-2xl justify-between px-7 transition-all shadow-lg active:scale-95 flex items-center ${
           isLoading 
-            ? 'bg-slate-300 cursor-wait' 
+            ? 'bg-slate-300 cursor-wait text-slate-500' 
             : 'bg-[#0F172A] hover:bg-blue-600 text-white'
         }`}
         onClick={onClick}
         disabled={isLoading}
       >
-        <span className="font-black uppercase tracking-[0.1em] text-xs">{btnText}</span>
+        <div className="flex items-center gap-2">
+           {isLoading && <RefreshCcw size={16} className="animate-spin" />}
+           <span className="font-black uppercase tracking-[0.1em] text-xs">{btnText}</span>
+        </div>
         {!isLoading && <ArrowRight size={18} className="group-hover:translate-x-1.5 transition-transform duration-300" />}
       </Button>
     </div>

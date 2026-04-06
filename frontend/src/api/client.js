@@ -1,17 +1,20 @@
 import axios from 'axios';
 
 /**
- * Axios instance for all API requests.
- * Standardized to communicate with the Node/Express backend on Port 5000.
+ * Axios instance for JobConnect / HireFlow.
+ * Communicates with the Node/Express backend on Port 5000.
  */
 const apiClient = axios.create({
   baseURL: 'http://localhost:5000/api', 
   timeout: 15000, 
+  headers: {
+    'Content-Type': 'application/json',
+  }
 });
 
 /**
- * Request Interceptor: Injects the JWT Token
- * It looks into localStorage for 'jobConnectUser' and pulls the token.
+ * Request Interceptor: Global Auth Injection
+ * Dynamically pulls the latest JWT from localStorage before every request.
  */
 apiClient.interceptors.request.use(
   (config) => {
@@ -21,17 +24,20 @@ apiClient.interceptors.request.use(
       try {
         const parsedData = JSON.parse(storageData);
         
-        // ✅ FLEXIBLE TOKEN EXTRACTION
-        // We check the top level (from your AuthContext spread) 
-        // and nested paths just in case the backend structure varies.
+        // Extracting token from various possible structures (User, Admin, or Employer)
         const token = parsedData.token || parsedData.data?.token || parsedData.user?.token;
         
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
         }
       } catch (err) {
-        console.error("Auth Token Parsing Error:", err);
+        console.error("Critical: Auth Token Parsing Error:", err);
       }
+    }
+
+    // Logging for development to debug "0 info" issues
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`🚀 Requesting: ${config.method?.toUpperCase()} ${config.url}`);
     }
 
     return config;
@@ -40,7 +46,8 @@ apiClient.interceptors.request.use(
 );
 
 /**
- * Response Interceptor: Error Handling & Session Management
+ * Response Interceptor: Intelligent Error Handling
+ * Manages session expiration, permission denials, and server sync errors.
  */
 apiClient.interceptors.response.use(
   (response) => response,
@@ -48,36 +55,40 @@ apiClient.interceptors.response.use(
     const { response, config } = error;
 
     if (response) {
-      // --- 401: Unauthorized / Session Expired ---
+      // --- 401: Unauthorized / Token Expired ---
       if (response.status === 401) {
-        console.warn("Session expired or invalid token.");
-        
-        // Prevent infinite redirect loops if already on login
+        // Only redirect if we aren't already on the login page to avoid loops
         if (!window.location.pathname.includes('/login')) {
+          console.warn("Session expired. Clearing local state...");
           localStorage.removeItem('jobConnectUser');
-          window.location.href = '/login?expired=true';
+          window.location.href = '/login?session=expired';
         }
       }
 
-      // --- 403: Forbidden ---
+      // --- 403: Forbidden (e.g., Non-Admin trying to Generate Report) ---
       if (response.status === 403) {
-        console.error("Forbidden: You do not have permission for this action.");
+        const message = response.data?.message || "You don't have permission for this action.";
+        console.error(`🛡️ Access Denied [403]: ${message}`);
+        // You could trigger a toast notification here
       }
 
-      // --- 404: Route Not Found ---
+      // --- 404: Missing Endpoint ---
       if (response.status === 404) {
-        console.error(`404 Error: ${config.url} not found. Check backend route prefixes.`);
+        console.error(`🔍 API Route Missing [404]: ${config.url}. Check backend index.js routes.`);
       }
 
-      // --- 500: Internal Server Error ---
+      // --- 500 & Above: Backend Crashes ---
       if (response.status >= 500) {
-        console.error("Server Error: Something went wrong on the backend.");
+        console.error("🔥 Server Error: The backend encountered an unhandled exception.");
       }
+    } else if (error.request) {
+      // --- Network Error (Backend not running) ---
+      console.error("🔌 Connectivity Error: No response from server. Is the Node server running on port 5000?");
     } else {
-      // --- Network Error (Server Down) ---
-      console.error("Network Error: Could not connect to the backend server at localhost:5000.");
+      console.error("⚠️ Axios Error:", error.message);
     }
 
+    // Always return the error so the calling component's catch() block can handle it
     return Promise.reject(error);
   }
 );

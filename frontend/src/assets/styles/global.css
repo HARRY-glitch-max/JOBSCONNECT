@@ -1,7 +1,21 @@
-/* src/assets/styles/global.css */
 @import "tailwindcss";
 
-/* You can still add your custom classes below the import */
-.my-custom-class {
-  background: red;
+@layer base {
+  body {
+    /* Step 1: Deep Slate 950 Base (Highest Contrast) */
+    @apply bg-slate-950 text-slate-50 antialiased;
+
+    /* Step 2: The 'Spotlight' Effect 
+       This makes the top-center of your screen feel 'lit', 
+       eliminating the muddy flat feel. 
+    */
+    background-image: radial-gradient(
+      circle at 50% -10%, 
+      rgba(59, 130, 246, 0.12) 0%, 
+      rgba(2, 6, 23, 1) 70%
+    );
+    
+    min-height: 100vh;
+    background-attachment: fixed;
+  }
 }

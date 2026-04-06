@@ -24,12 +24,13 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
+// Security and Logging
 app.use(helmet({ crossOriginResourcePolicy: false }));
-
 if (process.env.NODE_ENV === "development") {
   app.use(morgan("dev"));
 }
 
+// CORS Configuration
 const allowedOrigins = [
   "http://localhost:5173",
   "http://127.0.0.1:5173",
@@ -61,8 +62,10 @@ import chatRoutes from "./routes/chatRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
 import interviewRoutes from "./routes/interviewRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
+import reportRoutes from "./routes/reportRoutes.js"; // ✅ Registered
 import testRoutes from "./routes/testRoutes.js";
 
+// --- Route Registration ---
 app.use("/api/jobseekers", jobseekerRoutes);
 app.use("/api/employers", employerRoutes);
 app.use("/api/jobs", jobRoutes);
@@ -71,6 +74,7 @@ app.use("/api/chats", chatRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/interviews", interviewRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/reports", reportRoutes); // ✅ Fixes 404 on reports endpoints
 app.use("/api/test", testRoutes);
 
 app.get("/api/health", (req, res) => {
@@ -81,6 +85,7 @@ app.get("/", (req, res) => {
   res.send("Job Connect API is running...");
 });
 
+// --- Error Middleware ---
 import { notFound, errorHandler } from "./middleware/errorMiddleware.js";
 app.use(notFound);
 app.use(errorHandler);
@@ -101,12 +106,14 @@ const startServer = async () => {
       },
     });
 
+    // Make socket instance available in routes via req.app.get("socketio")
     app.set("socketio", io);
 
     io.on("connection", (socket) => {
       console.log("🔌 User connected:", socket.id);
 
       socket.on("join", (userId) => {
+        if (!userId) return;
         if (userId === "admin") {
           socket.join("admin_room");
           console.log("Administrator joined the global admin room");
@@ -132,12 +139,11 @@ const startServer = async () => {
             sender = { name: "System Admin", avatar: null };
           }
 
-          // 2. Resolve Receiver & Dynamic Model Type
+          // 2. Resolve Receiver
           if (receiverId === "admin") {
             receiver = { name: "Platform Admin", avatar: null };
             receiverType = "Admin";
           } else {
-            // Check Employer first, then JobSeeker to determine receiverModel
             const emp = await Employer.findById(receiverId).select("companyName avatar");
             if (emp) {
               receiver = emp;
@@ -148,36 +154,30 @@ const startServer = async () => {
             }
           }
 
-          // 3. Create Chat with REQUIRED Model Fields
+          // 3. Save Chat
           const chat = new Chat({
             senderId,
             senderName: sender?.name || sender?.companyName || "Unknown",
             senderAvatar: sender?.avatar || null,
-            senderModel: senderType, // ✅ FIXED: Required field
-            
+            senderModel: senderType,
             receiverId,
             receiverName: receiver?.name || receiver?.companyName || "Unknown",
             receiverAvatar: receiver?.avatar || null,
-            receiverModel: receiverType, // ✅ FIXED: Required field
-            
+            receiverModel: receiverType,
             message,
             timestamp: new Date(),
           });
 
           const savedMsg = await chat.save();
 
-          // 4. Real-time Delivery
-          if (receiverId === "admin") {
-            io.to("admin_room").emit("receive_message", savedMsg);
-          } else {
-            io.to(receiverId.toString()).emit("receive_message", savedMsg);
-          }
-          
+          // 4. Delivery
+          const target = receiverId === "admin" ? "admin_room" : receiverId.toString();
+          io.to(target).emit("receive_message", savedMsg);
           io.to(senderId.toString()).emit("receive_message", savedMsg);
 
         } catch (err) {
           console.error("Socket Messaging Error:", err);
-          socket.emit("error", { message: "Validation failed: model paths required." });
+          socket.emit("error", { message: "Message delivery failed." });
         }
       });
 
