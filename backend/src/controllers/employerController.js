@@ -3,7 +3,7 @@ import Job from "../models/Job.js";
 import Interview from "../models/Interview.js";
 import Application from "../models/Application.js";
 import generateToken from "../utils/generateToken.js";
-import axios from "axios"; // Added for Geolocation
+import axios from "axios"; 
 
 // =======================
 // Register employer
@@ -21,10 +21,8 @@ export const createEmployer = async (req, res) => {
     }
 
     // 2. GEOLOCATION CHECK (Kenya Only)
-    // Get IP (handles proxies like Heroku/Render/Vercel)
     const userIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
-    // We only enforce IP blocking in production to avoid issues on localhost (Windows)
     if (process.env.NODE_ENV === 'production') {
       try {
         const geoResponse = await axios.get(`http://ip-api.com/json/${userIp}`);
@@ -47,12 +45,14 @@ export const createEmployer = async (req, res) => {
       industry,
       contactInformation: { ...contactInformation, email },
       password,
-      nationality: "Kenyan" // Force the value in the database
+      role: "employer", // ✅ Explicitly setting role
+      nationality: "Kenyan" 
     });
 
     res.status(201).json({
       employerId: employer._id,
-      token: generateToken(employer._id, "employer", employer._id),
+      role: employer.role, // Returning role for frontend state management
+      token: generateToken(employer._id, employer.role, employer._id), // ✅ Passing role to token
     });
   } catch (err) {
     console.error("Reg Error:", err);
@@ -67,6 +67,8 @@ export const loginEmployer = async (req, res) => {
   try {
     let { email, password } = req.body;
     email = email.toLowerCase();
+    
+    // Find employer and ensure we have the role
     const employer = await Employer.findOne({ "contactInformation.email": email });
     
     if (!employer || !(await employer.matchPassword(password))) {
@@ -76,7 +78,8 @@ export const loginEmployer = async (req, res) => {
     res.status(200).json({
       employerId: employer._id,
       companyName: employer.companyName,
-      token: generateToken(employer._id, "employer", employer._id),
+      role: employer.role, // ✅ Returning role
+      token: generateToken(employer._id, employer.role, employer._id), // ✅ Passing role to token
     });
   } catch (err) {
     res.status(500).json({ message: "Login error." });
@@ -133,6 +136,8 @@ export const getEmployerById = async (req, res) => {
 
 export const updateEmployer = async (req, res) => {
   try {
+    // Note: Use findByIdAndUpdate carefully; it doesn't trigger 'save' middleware (password hashing)
+    // if you allow updating passwords here.
     const employer = await Employer.findByIdAndUpdate(req.params.id, req.body, { new: true });
     res.json(employer);
   } catch (err) {

@@ -17,37 +17,39 @@ export const protect = async (req, res, next) => {
       // 1. Verify Token
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-      // 2. Optimized Account Fetching based on Decoded Role
+      // 2. Optimized Account Fetching
       let account = null;
       const userRole = decoded.role?.toLowerCase();
 
+      // We use .lean() for performance since we don't need Mongoose save() methods here
       if (userRole === "admin") {
         account = await Admin.findById(decoded.id).select("-password").lean();
       } else if (userRole === "employer") {
         account = await Employer.findById(decoded.id).select("-password").lean();
       } else if (userRole === "jobseeker") {
         account = await User.findById(decoded.id).select("-password").lean();
-      } else {
-        // Fallback: If role is missing in token, check all (Safety Net)
-        const [foundUser, foundEmployer] = await Promise.all([
+      }
+
+      // Fallback: If role was missing in token (Safety Net)
+      if (!account) {
+        const [foundUser, foundEmployer, foundAdmin] = await Promise.all([
           User.findById(decoded.id).select("-password").lean(),
           Employer.findById(decoded.id).select("-password").lean(),
+          Admin.findById(decoded.id).select("-password").lean(),
         ]);
-        account = foundUser || foundEmployer;
+        account = foundUser || foundEmployer || foundAdmin;
       }
 
       if (!account) {
         return res.status(401).json({ message: "Account not found or session invalid." });
       }
 
-      // 3. Attach User, Role, and critical IDs to Request Object
-      // ✅ FIX: Explicitly mapping properties to ensure 'lean' objects work with controllers
+      // 3. Attach standard user object to request
+      // We ensure _id is a string and role is explicitly set
       req.user = {
         ...account,
         _id: account._id.toString(),
-        role: userRole || (account.companyName ? "employer" : "jobseeker"),
-        // ✅ CRITICAL: Ensure employerId is passed for the reports controller
-        employerId: account.employerId ? account.employerId.toString() : decoded.employerId,
+        role: userRole || (account.companyName ? "employer" : account.isAdmin ? "admin" : "jobseeker"),
       };
 
       next();
@@ -83,7 +85,8 @@ export const adminProtect = (req, res, next) => {
  * Restricts access to Employer users only
  */
 export const employerProtect = (req, res, next) => {
-  if (req.user && req.user.role === "employer") {
+  // We check for both "employer" string and existence of companyName as a fallback
+  if (req.user && (req.user.role === "employer" || req.user.companyName)) {
     return next();
   }
   return res.status(403).json({ message: "Access denied: Employers only." });

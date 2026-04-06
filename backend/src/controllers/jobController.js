@@ -12,7 +12,6 @@ const notifyAllJobseekers = async (job, type, message, subject) => {
   try {
     const jobseekers = await User.find({}, "name email");
     
-    // Promise.all handles multiple notifications in parallel
     await Promise.all(jobseekers.map(async (seeker) => {
       await Notification.create({
         userId: seeker._id,
@@ -39,14 +38,25 @@ const notifyAllJobseekers = async (job, type, message, subject) => {
 
 export const createJob = async (req, res) => {
   try {
-    const { employerId, title, description, requirements, location, salary } = req.body;
-    const job = new Job({ employerId, title, description, requirements, location, salary });
+    // ✅ ADDED: deadline from request body
+    const { employerId, title, description, requirements, location, salary, deadline } = req.body;
+    
+    const job = new Job({ 
+      employerId, 
+      title, 
+      description, 
+      requirements, 
+      location, 
+      salary,
+      deadline // ✅ Saved to DB
+    });
+
     await job.save();
 
     await notifyAllJobseekers(
       job,
       "job_posting",
-      `A new job "${job.title}" has been posted.`,
+      `A new job "${job.title}" has been posted. Deadline: ${new Date(deadline).toLocaleDateString()}`,
       "New Job Alert"
     );
 
@@ -58,7 +68,11 @@ export const createJob = async (req, res) => {
 
 export const getJobs = async (req, res) => {
   try {
-    const jobs = await Job.find().populate("employerId", "companyName industry");
+    // ✅ OPTIONAL: Filter out jobs that are already expired
+    const now = new Date();
+    const jobs = await Job.find({ deadline: { $gt: now } })
+      .populate("employerId", "companyName industry");
+    
     res.json(jobs);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -67,7 +81,9 @@ export const getJobs = async (req, res) => {
 
 export const getJobsByEmployer = async (req, res) => {
   try {
-    const jobs = await Job.find({ employerId: req.params.employerId }).populate("employerId", "companyName industry");
+    // Employers usually want to see ALL their jobs, including expired ones
+    const jobs = await Job.find({ employerId: req.params.employerId })
+      .populate("employerId", "companyName industry");
     res.json(jobs);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -78,7 +94,10 @@ export const getJobById = async (req, res) => {
   try {
     const job = await Job.findById(req.params.id).populate("employerId", "companyName industry");
     if (!job) return res.status(404).json({ message: "Job not found" });
-    res.json(job);
+    
+    // Attach the virtual 'isExpired' check in the response
+    const jobData = job.toObject({ virtuals: true });
+    res.json(jobData);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -86,7 +105,9 @@ export const getJobById = async (req, res) => {
 
 export const updateJob = async (req, res) => {
   try {
-    const job = await Job.findByIdAndUpdate(req.params.id, req.body, { new: true }).populate("employerId", "companyName");
+    const job = await Job.findByIdAndUpdate(req.params.id, req.body, { new: true })
+      .populate("employerId", "companyName");
+    
     if (!job) return res.status(404).json({ message: "Job not found" });
 
     await notifyAllJobseekers(job, "job_update", `Job "${job.title}" has been updated.`, "Job Update");
@@ -109,37 +130,45 @@ export const deleteJob = async (req, res) => {
 };
 
 // =======================
-// Interview Routes (The Missing Functions)
+// Interview Routes
 // =======================
 
 export const scheduleInterview = async (req, res) => {
   const { jobId } = req.params;
-  const { applicantId, date, time } = req.body;
+  const { applicantId, date, time, locationLink } = req.body;
 
   try {
     const job = await Job.findById(jobId);
     if (!job) return res.status(404).json({ message: "Job not found" });
 
-    const interview = await Interview.create({ jobId, applicantId, date, time });
+    // ✅ Create interview record
+    const interview = await Interview.create({ 
+      jobId, 
+      applicantId, 
+      date, 
+      time,
+      location: locationLink || "Office/Online" 
+    });
 
     const applicant = await User.findById(applicantId);
     if (applicant) {
       await Notification.create({
         userId: applicant._id,
         type: "interview",
-        content: `Interview scheduled for "${job.title}" on ${date} at ${time}.`,
+        content: `Interview scheduled for "${job.title}" on ${date} at ${time}. Location: ${locationLink || 'Not specified'}`,
       });
 
       await notifyJobseeker({
         email: applicant.email,
         name: applicant.name,
         subject: "Interview Scheduled",
-        message: `You have an interview scheduled for "${job.title}" on ${date} at ${time}.`,
+        message: `You have an interview scheduled for "${job.title}" on ${date} at ${time}. Please be prepared!`,
       });
     }
 
     res.status(201).json(interview);
   } catch (error) {
+    console.error(error);
     res.status(500).json({ message: "Failed to schedule interview" });
   }
 };
@@ -147,7 +176,8 @@ export const scheduleInterview = async (req, res) => {
 export const getInterviewsForJob = async (req, res) => {
   const { jobId } = req.params;
   try {
-    const interviews = await Interview.find({ jobId }).populate("applicantId", "name email");
+    const interviews = await Interview.find({ jobId })
+      .populate("applicantId", "name email");
     res.status(200).json(interviews);
   } catch (err) {
     res.status(500).json({ message: "Failed to fetch interviews" });

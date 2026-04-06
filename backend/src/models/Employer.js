@@ -5,22 +5,29 @@ const employerSchema = new mongoose.Schema({
   companyName: { type: String, required: true },
   industry: { type: String, required: true },
   contactInformation: {
-    email: { type: String, required: true, unique: true }, // Added unique for better integrity
+    email: { type: String, required: true, unique: true },
     phone: { type: String },
     address: { type: String }
   },
   password: { type: String, required: true },
 
-  // 🇰🇪 NEW: Nationality Enforcement
-  // Set to required to match your new controller logic
+  // 🔑 NEW: Role Definition
+  // We use enum to strictly enforce that the role can only be 'employer'
+  role: {
+    type: String,
+    required: true,
+    enum: ["employer"], 
+    default: "employer"
+  },
+
+  // 🇰🇪 Nationality Enforcement
   nationality: { 
     type: String, 
     required: true, 
     default: "Kenyan" 
   },
 
-  // 📍 NEW: Registration Metadata
-  // Stores the country detected during registration for audit purposes
+  // 📍 Registration Metadata
   registrationLocation: {
     country: { type: String, default: "Kenya" },
     countryCode: { type: String, default: "KE" }
@@ -55,7 +62,6 @@ employerSchema.methods.matchPassword = async function (enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
 };
 
-// Handle potential model overwrite issues in development
 const Employer = mongoose.models.Employer || mongoose.model("Employer", employerSchema);
 
 export default Employer;

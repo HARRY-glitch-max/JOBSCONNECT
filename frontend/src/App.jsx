@@ -32,6 +32,31 @@ import AdminLogin from "./pages/AdminLogin";
 import AdminDashboard from "./pages/AdminDashboard";
 import AdminRegister from "./pages/AdminRegister";
 
+/**
+ * ✅ GLOBAL VISIBILITY FIX
+ * This component injects a style tag that forces all inputs, selects, and textareas
+ * across the entire project to be high-contrast and visible.
+ */
+const GlobalInputStyles = () => (
+  <style dangerouslySetInnerHTML={{ __html: `
+    input, select, textarea {
+      background-color: #ffffff !important;
+      color: #111827 !important;
+      border: 1px solid #d1d5db !important;
+      opacity: 1 !important;
+      visibility: visible !important;
+    }
+    input::placeholder, textarea::placeholder {
+      color: #9ca3af !important;
+    }
+    input:focus {
+      border-color: #2563eb !important;
+      outline: none !important;
+      ring: 2px #2563eb !important;
+    }
+  `}} />
+);
+
 const AppContent = () => {
   const { loading, user, role } = useContext(AuthContext);
   const location = useLocation();
@@ -48,7 +73,7 @@ const AppContent = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-slate-50 dark:bg-slate-950">
+      <div className="flex items-center justify-center min-h-screen bg-slate-50">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
       </div>
     );
@@ -57,7 +82,8 @@ const AppContent = () => {
   const isAuthenticated = !!user;
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
+    <div className="min-h-screen bg-slate-50 text-slate-900 transition-colors duration-300">
+      <GlobalInputStyles />
       {!hideNavbar && <Navbar />}
 
       <main>
@@ -95,7 +121,7 @@ const AppContent = () => {
             element={!isAuthenticated ? <AdminLogin /> : <Navigate to="/admin/dashboard" replace />}
           />
 
-          {/* 5. PROTECTED DASHBOARDS (Splat routes handle internal navigation) */}
+          {/* 5. PROTECTED DASHBOARDS */}
           <Route
             path="/jobseeker/dashboard/*"
             element={isAuthenticated && role?.toLowerCase() === "jobseeker" ? <JobseekerDashboard /> : <Navigate to="/jobseeker/login" replace />}
