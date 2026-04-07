@@ -10,33 +10,25 @@ import {
 import { AuthContext } from "./contexts/AuthContext";
 import Navbar from "./components/layout/Navbar";
 
+// Pages
 import Home from "./pages/Home";
 import Jobs from "./pages/Jobs";
 import ApplyJob from "./pages/ApplyJob"; 
-
-// Shared
 import ChatPage from "./pages/ChatPage";
 
-// Jobseeker
+// Dashboards & Auth
 import JobseekerLogin from "./pages/JobseekerLogin";
 import JobseekerDashboard from "./pages/JobseekerDashboard";
 import JobseekerRegister from "./pages/JobseekerRegister";
 
-// Employer
 import EmployerLogin from "./pages/EmployerLogin";
 import EmployerDashboard from "./pages/EmployerDashboard";
 import EmployerRegister from "./pages/EmployerRegister";
 
-// Admin
 import AdminLogin from "./pages/AdminLogin";
 import AdminDashboard from "./pages/AdminDashboard";
 import AdminRegister from "./pages/AdminRegister";
 
-/**
- * ✅ GLOBAL VISIBILITY FIX
- * This component injects a style tag that forces all inputs, selects, and textareas
- * across the entire project to be high-contrast and visible.
- */
 const GlobalInputStyles = () => (
   <style dangerouslySetInnerHTML={{ __html: `
     input, select, textarea {
@@ -52,7 +44,7 @@ const GlobalInputStyles = () => (
     input:focus {
       border-color: #2563eb !important;
       outline: none !important;
-      ring: 2px #2563eb !important;
+      box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2) !important;
     }
   `}} />
 );
@@ -62,8 +54,8 @@ const AppContent = () => {
   const location = useLocation();
 
   useEffect(() => {
-    console.log("📍 Navigation Change:", location.pathname);
-  }, [location]);
+    window.scrollTo(0, 0);
+  }, [location.pathname]);
 
   const hideNavbar =
     location.pathname.startsWith("/employer/dashboard") ||
@@ -80,6 +72,7 @@ const AppContent = () => {
   }
 
   const isAuthenticated = !!user;
+  const userRole = role?.toLowerCase();
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 transition-colors duration-300">
@@ -88,57 +81,45 @@ const AppContent = () => {
 
       <main>
         <Routes>
-          {/* 1. PUBLIC ROUTES */}
           <Route path="/" element={<Home />} />
           <Route path="/jobs" element={<Jobs />} />
 
-          {/* 2. REGISTRATION ROUTES */}
+          {/* REGISTRATION */}
           <Route path="/jobseeker/register" element={<JobseekerRegister />} />
           <Route path="/employer/register" element={<EmployerRegister />} />
           <Route path="/admin/register" element={<AdminRegister />} />
 
-          {/* 3. APPLICATION ROUTE */}
+          {/* APPLICATION */}
           <Route 
             path="/apply/:jobId" 
-            element={
-              isAuthenticated && role?.toLowerCase() === "jobseeker" 
-                ? <ApplyJob /> 
-                : <Navigate to="/jobseeker/login" replace />
-            } 
+            element={isAuthenticated && userRole === "jobseeker" ? <ApplyJob /> : <Navigate to="/jobseeker/login" replace />} 
           />
 
-          {/* 4. AUTH ROUTES */}
-          <Route
-            path="/jobseeker/login"
-            element={!isAuthenticated ? <JobseekerLogin /> : <Navigate to="/jobseeker/dashboard" replace />}
-          />
-          <Route
-            path="/employer/login"
-            element={!isAuthenticated ? <EmployerLogin /> : <Navigate to="/employer/dashboard" replace />}
-          />
-          <Route
-            path="/admin/login"
-            element={!isAuthenticated ? <AdminLogin /> : <Navigate to="/admin/dashboard" replace />}
-          />
+          {/* AUTH */}
+          <Route path="/jobseeker/login" element={!isAuthenticated ? <JobseekerLogin /> : <Navigate to="/jobseeker/dashboard" replace />} />
+          <Route path="/employer/login" element={!isAuthenticated ? <EmployerLogin /> : <Navigate to="/employer/dashboard" replace />} />
+          <Route path="/admin/login" element={!isAuthenticated ? <AdminLogin /> : <Navigate to="/admin/dashboard" replace />} />
 
-          {/* 5. PROTECTED DASHBOARDS */}
+          {/* PROTECTED DASHBOARDS */}
           <Route
             path="/jobseeker/dashboard/*"
-            element={isAuthenticated && role?.toLowerCase() === "jobseeker" ? <JobseekerDashboard /> : <Navigate to="/jobseeker/login" replace />}
+            element={isAuthenticated && userRole === "jobseeker" ? <JobseekerDashboard /> : <Navigate to="/jobseeker/login" replace />}
           />
           <Route
             path="/employer/dashboard/*"
-            element={isAuthenticated && role?.toLowerCase() === "employer" ? <EmployerDashboard /> : <Navigate to="/employer/login" replace />}
+            element={isAuthenticated && userRole === "employer" ? <EmployerDashboard /> : <Navigate to="/employer/login" replace />}
           />
           <Route
             path="/admin/dashboard/*"
-            element={isAuthenticated && role?.toLowerCase() === "admin" ? <AdminDashboard /> : <Navigate to="/admin/login" replace />}
+            element={isAuthenticated && userRole === "admin" ? <AdminDashboard /> : <Navigate to="/admin/login" replace />}
           />
 
-          {/* 6. GLOBAL FALLBACK ROUTES */}
-          <Route path="/chat/:receiverId" element={isAuthenticated ? <ChatPage /> : <Navigate to="/" replace />} />
+          {/* GLOBAL CHAT ACCESS */}
+          <Route 
+            path="/chat/:id" 
+            element={isAuthenticated ? <ChatPage /> : <Navigate to="/" replace />} 
+          />
 
-          {/* 7. FALLBACK */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

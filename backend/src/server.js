@@ -10,7 +10,7 @@ import mongoose from "mongoose";
 import http from "http";
 import { Server } from "socket.io";
 
-// --- MY MODEL IMPORTS ---
+// --- 1. MODEL REGISTRATION ---
 import "./models/Jobseeker.js"; 
 import "./models/Employer.js";
 import "./models/Job.js";
@@ -21,16 +21,13 @@ dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
 const app = express();
 
-// Security and Logging
 app.use(helmet({ crossOriginResourcePolicy: false }));
 if (process.env.NODE_ENV === "development") {
   app.use(morgan("dev"));
 }
 
-// CORS Configuration
 const allowedOrigins = [
   "http://localhost:5173",
   "http://127.0.0.1:5173",
@@ -40,8 +37,7 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) return callback(null, true);
+      if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
       return callback(new Error(`CORS policy blocked origin: ${origin}`), false);
     },
     methods: ["GET", "POST", "PUT", "DELETE"],
@@ -53,7 +49,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// --- Importing Routes ---
+// --- 2. ROUTE REGISTRATION ---
 import jobseekerRoutes from "./routes/jobseekerRoutes.js";
 import employerRoutes from "./routes/employerRoutes.js";
 import jobRoutes from "./routes/jobRoutes.js";
@@ -62,10 +58,9 @@ import chatRoutes from "./routes/chatRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
 import interviewRoutes from "./routes/interviewRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
-import reportRoutes from "./routes/reportRoutes.js"; // ✅ Registered
+import reportRoutes from "./routes/reportRoutes.js";
 import testRoutes from "./routes/testRoutes.js";
 
-// --- Route Registration ---
 app.use("/api/jobseekers", jobseekerRoutes);
 app.use("/api/employers", employerRoutes);
 app.use("/api/jobs", jobRoutes);
@@ -74,138 +69,130 @@ app.use("/api/chats", chatRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/interviews", interviewRoutes);
 app.use("/api/admin", adminRoutes);
-app.use("/api/reports", reportRoutes); // ✅ Fixes 404 on reports endpoints
+app.use("/api/reports", reportRoutes);
 app.use("/api/test", testRoutes);
 
-app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", message: "API is alive" });
-});
+app.get("/api/health", (req, res) => res.json({ status: "ok", timestamp: new Date() }));
 
-app.get("/", (req, res) => {
-  res.send("Job Connect API is running...");
-});
-
-// --- Error Middleware ---
 import { notFound, errorHandler } from "./middleware/errorMiddleware.js";
-app.use(notFound);
-app.use(errorHandler);
-
-const PORT = process.env.PORT || 5000;
 
 const startServer = async () => {
   try {
     await connectDB();
-
     const server = http.createServer(app);
 
+    // --- 3. SOCKET.IO INITIALIZATION ---
     const io = new Server(server, {
       cors: {
         origin: allowedOrigins,
         methods: ["GET", "POST"],
         credentials: true,
       },
+      transports: ["websocket", "polling"], 
     });
 
-    // Make socket instance available in routes via req.app.get("socketio")
     app.set("socketio", io);
 
     io.on("connection", (socket) => {
-      console.log("🔌 User connected:", socket.id);
+      console.log(`🔌 Connected: ${socket.id}`);
 
+      // ✅ FIX: Robust Room Joining
+      // We trim and stringify to ensure "65a..." always matches "65a..."
       socket.on("join", (userId) => {
         if (!userId) return;
-        if (userId === "admin") {
-          socket.join("admin_room");
-          console.log("Administrator joined the global admin room");
-        }
-        socket.join(userId.toString());
-        console.log(`User ${userId} joined their private room`);
+        const room = userId === "admin" ? "admin_room" : userId.toString().trim();
+        socket.join(room);
+        console.log(`👤 User joined room: ${room}`);
       });
 
-      socket.on("send_message", async (msg) => {
+      socket.on("send_message", async (data) => {
         try {
-          const { senderId, receiverId, message, senderType } = msg;
+          const { senderId, receiverId, message, senderType } = data;
+
+          if (!senderId || !receiverId || !message) {
+            return socket.emit("error", { message: "Incomplete message data" });
+          }
+          
           const JobSeeker = mongoose.model("JobSeeker");
           const Employer = mongoose.model("Employer");
 
-          let sender, receiver, receiverType;
+          let senderData, receiverData, receiverType;
 
-          // 1. Resolve Sender
-          if (senderType === "JobSeeker") {
-            sender = await JobSeeker.findById(senderId).select("name avatar");
-          } else if (senderType === "Employer") {
-            sender = await Employer.findById(senderId).select("companyName avatar");
-          } else if (senderType === "Admin") {
-            sender = { name: "System Admin", avatar: null };
-          }
+          // Normalize senderType to match DB (handle "Jobseeker" vs "JobSeeker")
+          const normalizedSenderType = (senderType?.toLowerCase() === 'jobseeker') ? 'JobSeeker' : 'Employer';
 
-          // 2. Resolve Receiver
-          if (receiverId === "admin") {
-            receiver = { name: "Platform Admin", avatar: null };
-            receiverType = "Admin";
+          // Resolve Sender
+          if (normalizedSenderType === "JobSeeker") {
+            senderData = await JobSeeker.findById(senderId).select("name avatar");
           } else {
-            const emp = await Employer.findById(receiverId).select("companyName avatar");
-            if (emp) {
-              receiver = emp;
-              receiverType = "Employer";
-            } else {
-              receiver = await JobSeeker.findById(receiverId).select("name avatar");
-              receiverType = "JobSeeker";
-            }
+            const emp = await Employer.findById(senderId).select("companyName avatar");
+            senderData = { name: emp?.companyName, avatar: emp?.avatar };
           }
 
-          // 3. Save Chat
-          const chat = new Chat({
+          // Resolve Receiver
+          const empCheck = await Employer.findById(receiverId).select("companyName avatar");
+          if (empCheck) {
+            receiverData = { name: empCheck.companyName, avatar: empCheck.avatar };
+            receiverType = "Employer";
+          } else {
+            const jsCheck = await JobSeeker.findById(receiverId).select("name avatar");
+            receiverData = jsCheck;
+            receiverType = "JobSeeker";
+          }
+
+          // Persist to DB
+          const newChat = new Chat({
             senderId,
-            senderName: sender?.name || sender?.companyName || "Unknown",
-            senderAvatar: sender?.avatar || null,
-            senderModel: senderType,
+            senderName: senderData?.name || "User",
+            senderAvatar: senderData?.avatar || null,
+            senderModel: normalizedSenderType,
             receiverId,
-            receiverName: receiver?.name || receiver?.companyName || "Unknown",
-            receiverAvatar: receiver?.avatar || null,
+            receiverName: receiverData?.name || "User",
+            receiverAvatar: receiverData?.avatar || null,
             receiverModel: receiverType,
-            message,
-            timestamp: new Date(),
+            message: message.trim(),
+            timestamp: new Date()
           });
 
-          const savedMsg = await chat.save();
+          const savedMsg = await newChat.save();
 
-          // 4. Delivery
-          const target = receiverId === "admin" ? "admin_room" : receiverId.toString();
-          io.to(target).emit("receive_message", savedMsg);
-          io.to(senderId.toString()).emit("receive_message", savedMsg);
+          // ✅ FIX: Instant Delivery to BOTH Rooms
+          const targetRoom = receiverId.toString().trim();
+          const senderRoom = senderId.toString().trim();
+          
+          // 1. Emit to the person receiving the message
+          io.to(targetRoom).emit("receive_message", savedMsg);
+          
+          // 2. Emit back to the sender (updates all their open tabs instantly)
+          io.to(senderRoom).emit("receive_message", savedMsg); 
+
+          // 3. UI Notification
+          io.to(targetRoom).emit("new_conversation_notification", { 
+            from: senderData?.name,
+            message: message.substring(0, 30) + "..."
+          });
 
         } catch (err) {
-          console.error("Socket Messaging Error:", err);
-          socket.emit("error", { message: "Message delivery failed." });
+          console.error("❌ Socket Error:", err);
+          socket.emit("error", { message: "Messaging failed" });
         }
       });
 
-      socket.on("typing", ({ receiverId, isTyping }) => {
-        const target = receiverId === "admin" ? "admin_room" : receiverId.toString();
-        socket.to(target).emit("display_typing", { isTyping });
-      });
-
       socket.on("disconnect", () => {
-        console.log("User disconnected:", socket.id);
+        console.log(`❌ Disconnected: ${socket.id}`);
       });
     });
 
+    app.use(notFound);
+    app.use(errorHandler);
+
+    const PORT = process.env.PORT || 5000;
     server.listen(PORT, "0.0.0.0", () => {
-      console.log(`Server running at http://0.0.0.0:${PORT}`);
+      console.log(`🚀 Server running on port ${PORT}`);
     });
 
-    const shutdown = async () => {
-      console.log("\nShutting down...");
-      server.close();
-      await mongoose.connection.close();
-      process.exit(0);
-    };
-
-    process.on("SIGINT", shutdown);
-    process.on("SIGTERM", shutdown);
   } catch (err) {
-    console.error("Startup error:", err.stack || err);
+    console.error("💥 Startup Error:", err);
     process.exit(1);
   }
 };

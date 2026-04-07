@@ -5,10 +5,10 @@ import {
   MessageSquare, PlusCircle, Briefcase, Users,
   Calendar, UserCircle, LogOut, Bell,
   TrendingUp, Sparkles, Search, Target,
-  LayoutDashboard, ChevronRight, Zap, Globe
+  Zap, Globe, ChevronRight
 } from "lucide-react";
 
-import ChatPage from "./ChatPage";
+import ChatPage from "./ChatPage"; 
 import PostJob from "./PostJob";
 import Interviews from "./Interviews";
 import Jobs from "./Jobs";
@@ -18,51 +18,84 @@ import EmployerNotifications from "./EmployerNotifications";
 import PageTransition from "../components/PageTransition";
 import { AuthContext } from "../contexts/AuthContext";
 import apiClient from "../api/client";
-import { socket } from "../socket";
+import { useSocket } from "../hooks/useSocket";
 import Button from "../components/ui/Button";
 
 export default function EmployerDashboard() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useContext(AuthContext);
+  const socket = useSocket();
 
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
 
-  const isChatActive = location.pathname.includes("/chat") || location.pathname.includes("/messages");
-
+  // --- 1. DATA FETCHING ---
   const fetchNotifications = useCallback(async () => {
-    if (!user?._id) return;
+    const uid = user?._id || user?.id;
+    if (!uid) return;
     try {
-      const res = await apiClient.get(`/notifications/user/${user._id}`);
+      const res = await apiClient.get(`/notifications/user/${uid}`);
       setNotifications(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
-      console.error("Error fetching notifications", err);
+      console.error("❌ Notification Fetch Error:", err);
     }
-  }, [user?._id]);
-
-  useEffect(() => { fetchNotifications(); }, [fetchNotifications]);
-
-  const handleNewNotification = useCallback((newNotif) => {
-    setNotifications((prev) => prev.find(n => n._id === newNotif._id) ? prev : [newNotif, ...prev]);
-  }, []);
+  }, [user]);
 
   useEffect(() => {
-    if (!socket || !user?._id) return;
-    socket.emit("join", user._id);
-    socket.on("new_notification", handleNewNotification);
-    return () => socket.off("new_notification", handleNewNotification);
-  }, [user?._id, handleNewNotification]);
+    fetchNotifications();
+  }, [fetchNotifications]);
+
+  // --- 2. REAL-TIME SOCKET EVENTS ---
+  useEffect(() => {
+    const uid = user?._id || user?.id;
+    if (!socket || !uid) return;
+    
+    socket.emit("join", uid);
+
+    socket.on("new_notification", (newNotif) => {
+      setNotifications((prev) => [newNotif, ...prev]);
+    });
+
+    socket.on("new_conversation_notification", () => {
+      // Small delay to ensure DB is updated before fetch
+      setTimeout(fetchNotifications, 500);
+    });
+
+    return () => {
+      socket.off("new_notification");
+      socket.off("new_conversation_notification");
+    };
+  }, [socket, user, fetchNotifications]);
 
   useEffect(() => {
     setUnreadCount(notifications.filter((n) => !n.isRead).length);
   }, [notifications]);
 
+  // --- 3. ENHANCED DYNAMIC HEADER LOGIC ---
+  const getHeaderTitle = () => {
+    // If we passed a name through state (like Harry Onyango), use it!
+    if (location.state?.receiverName) return `Chat: ${location.state.receiverName}`;
+    
+    const pathSegments = location.pathname.split("/").filter(Boolean);
+    const lastSegment = pathSegments[pathSegments.length - 1];
+    
+    const isId = /^[0-9a-fA-F]{24}$/.test(lastSegment);
+    
+    if (isId || pathSegments.includes("messages")) return "Messages";
+    
+    // Fallback: Convert kabob-case to Title Case
+    return lastSegment
+      ?.replace(/-/g, " ")
+      .replace(/\b\w/g, (l) => l.toUpperCase()) || "Overview";
+  };
+
+  // --- 4. NAVIGATION CONFIG ---
   const navItems = [
     { to: "reports", label: "Analytics", icon: <TrendingUp size={20} /> },
     { to: "notifications", label: "Alerts", icon: <Bell size={20} />, badge: unreadCount },
     { to: "interviews", label: "Interviews", icon: <Calendar size={20} /> },
-    { to: "chat", label: "Messages", icon: <MessageSquare size={20} /> },
+    { to: "messages", label: "Messages", icon: <MessageSquare size={20} /> },
     { to: "post-job", label: "Create Job", icon: <PlusCircle size={20} /> },
     { to: "my-jobs", label: "Manage Listings", icon: <Briefcase size={20} /> },
     { to: "applications", label: "Talent Pool", icon: <Users size={20} /> },
@@ -73,7 +106,7 @@ export default function EmployerDashboard() {
   return (
     <div className="flex h-screen bg-[#FDFDFD] font-sans text-slate-900 overflow-hidden">
       
-      {/* ================= SIDEBAR (Ultra-Modern Dark) ================= */}
+      {/* SIDEBAR */}
       <aside className="w-80 bg-[#0A0F1D] flex flex-col z-30 relative shadow-[20px_0_60px_-15px_rgba(0,0,0,0.3)]">
         <div className="p-10">
           <div className="flex items-center gap-3 cursor-pointer group" onClick={() => navigate("/employer/dashboard")}>
@@ -86,7 +119,7 @@ export default function EmployerDashboard() {
           </div>
         </div>
 
-        <nav className="flex-1 px-6 space-y-2 overflow-y-auto">
+        <nav className="flex-1 px-6 space-y-2 overflow-y-auto custom-scrollbar">
           <p className="px-4 text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 mb-6">Navigation</p>
           {navItems.map((item) => (
             <NavLink
@@ -94,7 +127,7 @@ export default function EmployerDashboard() {
               to={`/employer/dashboard/${item.to}`}
               className={({ isActive }) =>
                 `flex items-center justify-between px-5 py-4 rounded-[1.25rem] transition-all duration-500 group relative ${
-                  isActive 
+                  isActive || (item.to === "messages" && location.pathname.includes("/messages"))
                     ? "bg-white/10 text-white translate-x-2" 
                     : "text-slate-400 hover:text-slate-100 hover:bg-white/5"
                 }`
@@ -105,7 +138,7 @@ export default function EmployerDashboard() {
                 <span className="font-bold text-sm tracking-tight">{item.label}</span>
               </div>
               {item.badge > 0 && (
-                <span className="bg-blue-600 text-white text-[10px] font-black px-2 py-0.5 rounded-lg">
+                <span className="bg-blue-600 text-white text-[10px] font-black px-2 py-0.5 rounded-lg animate-pulse">
                   {item.badge}
                 </span>
               )}
@@ -113,7 +146,7 @@ export default function EmployerDashboard() {
           ))}
         </nav>
 
-        {/* Profile Card */}
+        {/* PROFILE CARD */}
         <div className="m-6 p-6 rounded-[2rem] bg-gradient-to-b from-slate-800/40 to-slate-900/60 border border-white/5 shadow-2xl">
           <div className="flex items-center gap-4 mb-6">
             <div className="w-12 h-12 rounded-2xl bg-blue-600 flex items-center justify-center text-white font-black text-xl border-4 border-slate-800 shadow-xl">
@@ -131,13 +164,13 @@ export default function EmployerDashboard() {
         </div>
       </aside>
 
-      {/* ================= MAIN CONTENT (Light & Airy) ================= */}
+      {/* MAIN CONTENT */}
       <main className="flex-1 flex flex-col overflow-hidden relative">
         <header className="h-24 flex items-center justify-between px-12 bg-white/60 backdrop-blur-xl border-b border-slate-100 sticky top-0 z-20">
           <div>
             <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] mb-1">Current Workspace</p>
             <h1 className="text-2xl font-black text-slate-900 tracking-tighter">
-              {location.pathname.split("/").pop().replace("-", " ") || "Overview"}
+              {getHeaderTitle()}
             </h1>
           </div>
           
@@ -164,10 +197,13 @@ export default function EmployerDashboard() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-12 custom-scrollbar bg-[#F8FAFC]">
+        <div className="flex-1 overflow-y-auto p-12 bg-[#F8FAFC]">
           <AnimatePresence mode="wait">
             <Routes location={location} key={location.pathname}>
-              <Route path="chat" element={<PageTransition><ChatPage /></PageTransition>} />
+              {/* MESSAGES FLOW */}
+              <Route path="messages" element={<PageTransition><ChatPage /></PageTransition>} />
+              <Route path="messages/:id" element={<PageTransition><ChatPage /></PageTransition>} />
+              
               <Route path="notifications" element={<PageTransition><EmployerNotifications refreshBadge={fetchNotifications} /></PageTransition>} />
               <Route path="applications" element={<PageTransition><EmployerApplications /></PageTransition>} />
               <Route path="reports" element={<PageTransition><EmployerReports /></PageTransition>} />
@@ -183,6 +219,7 @@ export default function EmployerDashboard() {
   );
 }
 
+// --- 5. DEFAULT OVERVIEW COMPONENT (INTERNAL) ---
 function DefaultOverview({ user, goTo }) {
   return (
     <motion.div 
@@ -190,24 +227,23 @@ function DefaultOverview({ user, goTo }) {
       animate={{ opacity: 1, y: 0 }} 
       className="max-w-7xl mx-auto space-y-12"
     >
-      {/* Dynamic Hero Section */}
       <div className="grid lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 relative overflow-hidden bg-white rounded-[3rem] p-16 shadow-[0_40px_100px_-20px_rgba(0,0,0,0.04)] border border-slate-100 group">
           <div className="absolute top-0 right-0 w-96 h-96 bg-blue-50 rounded-full -mr-32 -mt-32 blur-3xl opacity-50 group-hover:opacity-80 transition-opacity duration-1000"></div>
           
           <div className="relative z-10">
             <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-blue-50 text-blue-600 text-[10px] font-black uppercase tracking-widest mb-10 border border-blue-100">
-              <Sparkles size={14} /> Intelligence Engine Active
+              <Sparkles size={14} /> AI Talent Matching Active
             </div>
             <h2 className="text-6xl font-black text-slate-900 mb-8 leading-[0.9] tracking-tight">
-              Scale your <br/>
-              <span className="text-blue-600">Dream Team.</span>
+              Build your <br/>
+              <span className="text-blue-600">Product Team.</span>
             </h2>
             <p className="text-slate-500 text-xl mb-12 font-medium max-w-lg leading-relaxed">
-              Welcome back, {user?.name?.split(' ')[0]}. You have <span className="text-slate-900 font-black">12 active</span> listings and <span className="text-slate-900 font-black">4 interviews</span> today.
+              Welcome back, {user?.companyName || 'Partner'}. You have active listings and new talent is waiting for review.
             </p>
             <div className="flex gap-4">
-              <Button onClick={() => goTo("post-job")} className="bg-slate-900 hover:bg-blue-600 text-white px-10 py-5 rounded-2xl font-black flex items-center gap-3 transition-all shadow-2xl active:scale-95">
+              <Button onClick={() => goTo("post-job")} className="bg-slate-900 hover:bg-blue-600 text-white px-10 py-5 rounded-2xl font-black flex items-center gap-3 transition-all shadow-2xl shadow-slate-200">
                 <PlusCircle size={20} /> Post Opening
               </Button>
               <Button onClick={() => goTo("reports")} variant="outline" className="border-slate-200 text-slate-900 hover:bg-slate-50 px-10 py-5 rounded-2xl font-black transition-all">
@@ -221,18 +257,17 @@ function DefaultOverview({ user, goTo }) {
           <div className="absolute bottom-0 right-0 w-64 h-64 bg-blue-600/20 blur-[80px]"></div>
           <div>
             <h4 className="text-2xl font-black tracking-tight mb-2">Hiring Rate</h4>
-            <p className="text-slate-500 font-bold text-sm italic">Compared to last month</p>
+            <p className="text-slate-500 font-bold text-sm italic">Growth vs last month</p>
           </div>
           <div className="mt-10">
             <span className="text-7xl font-black tracking-tighter text-blue-500">84%</span>
             <div className="flex items-center gap-2 text-emerald-400 font-black text-xs uppercase tracking-widest mt-4">
-               <TrendingUp size={16} /> +12.5% Growth
+                <TrendingUp size={16} /> +12.5% Growth
             </div>
           </div>
         </div>
       </div>
 
-      {/* Grid Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
         {[
           { label: "Active Listings", value: "12", color: "text-blue-600", bg: "bg-blue-50", icon: <Briefcase /> },
