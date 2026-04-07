@@ -3,37 +3,31 @@ import bcrypt from "bcryptjs";
 
 const jobseekerSchema = new mongoose.Schema(
   {
-    // Core identity fields
     name: { type: String, required: true },
     email: { 
       type: String, 
       required: true, 
       unique: true, 
-      lowercase: true // Ensures emails are always stored in lowercase
+      lowercase: true 
     },
     password: { type: String, required: true },
 
-    // 🇰🇪 NEW: Nationality Enforcement
     nationality: { 
       type: String, 
       required: true, 
       default: "Kenyan" 
     },
 
-    // 📍 NEW: Registration Metadata
-    // Tracks the location data from the IP check for audit purposes
     registrationLocation: {
       country: { type: String, default: "Kenya" },
       countryCode: { type: String, default: "KE" }
     },
 
-    // Optional profile fields
     bio: { type: String },
     skills: [{ type: String }],
-    cv: { type: String },     // CV file path or URL
-    avatar: { type: String }, // profile picture URL or file path
+    cv: { type: String },
+    avatar: { type: String },
 
-    // Role field
     role: {
       type: String,
       enum: ["jobseeker"],
@@ -55,9 +49,8 @@ jobseekerSchema.methods.matchPassword = async function (enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
 };
 
-// ✅ CRITICAL FIX: Standardize name to "JobSeeker" (Uppercase S)
-// This must match the 'ref' used in Interview.js and Application.js
-const JobSeeker =
-  mongoose.models.JobSeeker || mongoose.model("JobSeeker", jobseekerSchema);
+// ✅ FIX: Variables and Model Strings must be consistent
+// Using "JobSeeker" (Capital S) everywhere to match your Interview/Application refs
+const JobSeeker = mongoose.models.JobSeeker || mongoose.model("JobSeeker", jobseekerSchema);
 
 export default JobSeeker;

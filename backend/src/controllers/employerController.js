@@ -1,3 +1,4 @@
+// controllers/employerController.js
 import Employer from "../models/Employer.js";
 import Job from "../models/Job.js";
 import Interview from "../models/Interview.js";
@@ -45,14 +46,14 @@ export const createEmployer = async (req, res) => {
       industry,
       contactInformation: { ...contactInformation, email },
       password,
-      role: "employer", // ✅ Explicitly setting role
+      role: "employer", 
       nationality: "Kenyan" 
     });
 
     res.status(201).json({
       employerId: employer._id,
-      role: employer.role, // Returning role for frontend state management
-      token: generateToken(employer._id, employer.role, employer._id), // ✅ Passing role to token
+      role: employer.role, 
+      token: generateToken(employer._id, employer.role), 
     });
   } catch (err) {
     console.error("Reg Error:", err);
@@ -68,7 +69,6 @@ export const loginEmployer = async (req, res) => {
     let { email, password } = req.body;
     email = email.toLowerCase();
     
-    // Find employer and ensure we have the role
     const employer = await Employer.findOne({ "contactInformation.email": email });
     
     if (!employer || !(await employer.matchPassword(password))) {
@@ -78,8 +78,8 @@ export const loginEmployer = async (req, res) => {
     res.status(200).json({
       employerId: employer._id,
       companyName: employer.companyName,
-      role: employer.role, // ✅ Returning role
-      token: generateToken(employer._id, employer.role, employer._id), // ✅ Passing role to token
+      role: employer.role, 
+      token: generateToken(employer._id, employer.role), 
     });
   } catch (err) {
     res.status(500).json({ message: "Login error." });
@@ -92,6 +92,8 @@ export const loginEmployer = async (req, res) => {
 export const getEmployerReports = async (req, res) => {
   try {
     const employerId = req.user?._id; 
+    if (!employerId) return res.status(401).json({ message: "Not authorized" });
+
     const employerJobIds = await Job.find({ employerId }).distinct("_id");
 
     const [totalJobs, activeJobs, totalApps, totalInterviews] = await Promise.all([
@@ -136,8 +138,6 @@ export const getEmployerById = async (req, res) => {
 
 export const updateEmployer = async (req, res) => {
   try {
-    // Note: Use findByIdAndUpdate carefully; it doesn't trigger 'save' middleware (password hashing)
-    // if you allow updating passwords here.
     const employer = await Employer.findByIdAndUpdate(req.params.id, req.body, { new: true });
     res.json(employer);
   } catch (err) {
@@ -155,11 +155,14 @@ export const deleteEmployer = async (req, res) => {
 };
 
 // =======================
-// Jobs & Interviews
+// Jobs & Interviews (FIXED FOR 500 ERRORS)
 // =======================
 export const getEmployerJobs = async (req, res) => {
   try {
-    const jobs = await Job.find({ employerId: req.user._id });
+    const employerId = req.user?._id;
+    if (!employerId) return res.status(401).json({ message: "Employer ID not found in session." });
+
+    const jobs = await Job.find({ employerId });
     res.json(jobs);
   } catch (err) {
     res.status(500).json({ message: "Error fetching jobs." });
@@ -168,11 +171,16 @@ export const getEmployerJobs = async (req, res) => {
 
 export const getEmployerInterviews = async (req, res) => {
   try {
-    const interviews = await Interview.find({ employerId: req.user._id })
+    const employerId = req.user?._id;
+    if (!employerId) return res.status(401).json({ message: "Not authorized to view interviews." });
+
+    const interviews = await Interview.find({ employerId })
       .populate("jobId", "title")
-      .populate("userId", "name email");
+      .populate("userId", "name email"); // ✅ Uses the 'userId' field from your schema
+    
     res.json(interviews);
   } catch (err) {
+    console.error("Fetch Interviews Error:", err);
     res.status(500).json({ message: "Error fetching interviews." });
   }
 };
