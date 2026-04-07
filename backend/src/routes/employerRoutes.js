@@ -9,6 +9,7 @@ import {
   getEmployerJobs,
   getEmployerInterviews,
   getEmployerReports,
+  updateInterviewStatus, // ✅ Added new controller import
 } from "../controllers/employerController.js";
 import { shortlistCandidate } from "../controllers/applicationController.js";
 import { protect } from "../middleware/authMiddleware.js";
@@ -24,13 +25,16 @@ router.post("/login", loginEmployer);
 // ==========================================
 // 2. PROTECTED EMPLOYER ACTIONS
 // ==========================================
-// Middleware 'protect' ensures a valid JWT is present before proceeding
+// Shortlist a candidate for a specific application
 router.put("/applications/:id/shortlist", protect, shortlistCandidate);
+
+// ✅ NEW: Update interview status/result (Pass/Fail)
+// Endpoint: PUT /api/employers/interviews/:id/status
+router.put("/interviews/:id/status", protect, updateInterviewStatus);
 
 // ==========================================
 // 3. ANALYTICS & SPECIFIC COLLECTIONS
 // ==========================================
-// IMPORTANT: These must sit ABOVE the "/:id" routes to avoid route hijacking
 router.get("/reports", protect, getEmployerReports); 
 router.get("/jobs", protect, getEmployerJobs);
 router.get("/interviews", protect, getEmployerInterviews);
@@ -38,10 +42,9 @@ router.get("/interviews", protect, getEmployerInterviews);
 // ==========================================
 // 4. GENERAL & DYNAMIC ID ROUTES
 // ==========================================
-// Fetch all employers (Admin/Internal use)
 router.get("/", protect, getEmployers);
 
-// Dynamic routes - these catch any single string following /api/employers/
+// Dynamic routes
 router.get("/:id", protect, getEmployerById);
 router.put("/:id", protect, updateEmployer);
 router.delete("/:id", protect, deleteEmployer);

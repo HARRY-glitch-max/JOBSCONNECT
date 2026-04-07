@@ -1,4 +1,3 @@
-// controllers/employerController.js
 import Employer from "../models/Employer.js";
 import Job from "../models/Job.js";
 import Interview from "../models/Interview.js";
@@ -14,14 +13,12 @@ export const createEmployer = async (req, res) => {
     const { companyName, industry, contactInformation, password, nationality } = req.body;
     const email = contactInformation.email.toLowerCase();
 
-    // 1. STRICTOR NATIONALITY CHECK
     if (!nationality || nationality.toLowerCase() !== 'kenyan') {
       return res.status(403).json({ 
         message: "Registration is restricted to Kenyan nationals only." 
       });
     }
 
-    // 2. GEOLOCATION CHECK (Kenya Only)
     const userIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
     if (process.env.NODE_ENV === 'production') {
@@ -37,7 +34,6 @@ export const createEmployer = async (req, res) => {
       }
     }
 
-    // 3. PROCEED WITH REGISTRATION
     const employerExists = await Employer.findOne({ "contactInformation.email": email });
     if (employerExists) return res.status(400).json({ message: "Employer already exists." });
 
@@ -155,7 +151,7 @@ export const deleteEmployer = async (req, res) => {
 };
 
 // =======================
-// Jobs & Interviews (FIXED FOR 500 ERRORS)
+// Jobs & Interviews
 // =======================
 export const getEmployerJobs = async (req, res) => {
   try {
@@ -176,11 +172,43 @@ export const getEmployerInterviews = async (req, res) => {
 
     const interviews = await Interview.find({ employerId })
       .populate("jobId", "title")
-      .populate("userId", "name email"); // ✅ Uses the 'userId' field from your schema
+      .populate("userId", "name email") 
+      .sort({ date: 1 });
     
     res.json(interviews);
   } catch (err) {
     console.error("Fetch Interviews Error:", err);
     res.status(500).json({ message: "Error fetching interviews." });
+  }
+};
+
+// ✅ NEW: Update Interview Result (Pass/Fail)
+export const updateInterviewStatus = async (req, res) => {
+  try {
+    const { id } = req.params; // Interview ID
+    const { result, status, feedback } = req.body;
+
+    const updatedInterview = await Interview.findByIdAndUpdate(
+      id,
+      { 
+        result,    // "passed", "failed", or "pending"
+        status,    // "completed", "cancelled", or "scheduled"
+        feedback   // String notes
+      },
+      { new: true }
+    ).populate("userId", "name email").populate("jobId", "title");
+
+    if (!updatedInterview) {
+      return res.status(404).json({ message: "Interview not found." });
+    }
+
+    res.status(200).json({ 
+      success: true, 
+      message: `Candidate marked as ${result}`, 
+      data: updatedInterview 
+    });
+  } catch (err) {
+    console.error("Update Status Error:", err);
+    res.status(500).json({ message: "Error updating interview status." });
   }
 };
