@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useContext } from "react";
+import React, { useEffect, useState, useContext, useCallback } from "react";
 import {
   scheduleInterview,
   getEmployerInterviews,
@@ -10,7 +10,7 @@ import { AuthContext } from "../contexts/AuthContext";
 import StatusBadge from "../components/applications/StatusBadge";
 
 export default function Interviews() {
-  const { user } = useContext(AuthContext);
+  const { user, role } = useContext(AuthContext);
 
   // --- State Management ---
   const [interviews, setInterviews] = useState([]);
@@ -20,39 +20,55 @@ export default function Interviews() {
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({ jobId: "", candidateId: "", date: "", time: "", location: "" });
 
-  // --- Data Fetching ---
+  // --- 1. RESOLVE STABLE IDENTITY ---
+  // This ensures we have the correct ID before attempting to fetch
+  const employerId = user?.employerId || user?._id;
+
+  // Memoized fetch function so it can be called after scheduling
+  const fetchData = useCallback(async () => {
+    if (!employerId) return;
+
+    try {
+      setLoading(true);
+      setError("");
+      
+      console.log(`📡 Fetching interviews for ID: ${employerId}`);
+
+      // Fetch in parallel for performance
+      const [interviewsRes, appsRes, jobsRes] = await Promise.all([
+        getEmployerInterviews(employerId),
+        getEmployerApplications(employerId),
+        getEmployerJobs(employerId),
+      ]);
+
+      // Handle Jobseeker vs Employer view mapping if using unified route
+      setInterviews(interviewsRes.data || []);
+      setJobs(jobsRes.data || []);
+      
+      // Filter shortlisted candidates for the dropdown
+      const shortlisted = (appsRes.data || []).filter(app => app.status === "shortlisted");
+      setApplications(shortlisted);
+
+    } catch (err) {
+      console.error("❌ Data fetch error:", err);
+      setError(err.response?.data?.message || "Failed to load management data");
+    } finally {
+      setLoading(false);
+    }
+  }, [employerId]);
+
+  // Trigger fetch when user/employerId becomes available
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        const employerId = user?.employerId || user?._id; 
+    if (user) {
+      fetchData();
+    }
+  }, [user, employerId, fetchData]);
 
-        // Fetch everything in parallel for speed
-        const [interviewsRes, appsRes, jobsRes] = await Promise.all([
-          getEmployerInterviews(employerId),
-          getEmployerApplications(employerId),
-          getEmployerJobs(employerId),
-        ]);
-
-        // Filter for shortlisted candidates only
-        const shortlisted = (appsRes.data || []).filter(app => app.status === "shortlisted");
-        
-        setApplications(shortlisted);
-        setJobs(jobsRes.data || []);
-        setInterviews(interviewsRes.data || []);
-      } catch (err) {
-        console.error("Data fetch error:", err);
-        setError(err.response?.data?.message || "Failed to load management data");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (user) fetchData();
-  }, [user]);
-
-  // --- Logic: Only show candidates who applied for the selected job ---
-  const filteredCandidates = applications.filter(app => app.jobId?._id === form.jobId);
+  // --- Logic: Filter candidates based on selected job ---
+  const filteredCandidates = applications.filter(app => {
+    const appId = app.jobId?._id || app.jobId; // Handles both populated and unpopulated IDs
+    return String(appId) === String(form.jobId);
+  });
 
   // --- Action: Schedule ---
   const handleSchedule = async (e) => {
@@ -73,14 +89,10 @@ export default function Interviews() {
       });
 
       alert("Interview scheduled successfully!");
-
-      // Refresh list to show new interview
-      const employerId = user?.employerId || user?._id;
-      const refreshed = await getEmployerInterviews(employerId);
-      setInterviews(refreshed.data || []);
-      
-      // Reset form
       setForm({ jobId: "", candidateId: "", date: "", time: "", location: "" });
+      
+      // Refresh the list immediately
+      fetchData();
     } catch (err) {
       setError(err.response?.data?.message || "Failed to schedule interview");
     }
@@ -98,7 +110,12 @@ export default function Interviews() {
     }
   };
 
-  if (loading) return <div className="p-10 text-center text-gray-500 animate-pulse">Loading dashboard...</div>;
+  if (loading) return (
+    <div className="p-10 text-center text-gray-500">
+      <div className="animate-spin inline-block w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full mb-4"></div>
+      <p>Syncing Schedule...</p>
+    </div>
+  );
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
@@ -108,7 +125,7 @@ export default function Interviews() {
       </header>
       
       {error && (
-        <div className="bg-red-50 border-l-4 border-red-500 text-red-700 p-4 mb-6 shadow-sm" role="alert">
+        <div className="bg-red-50 border-l-4 border-red-500 text-red-700 p-4 mb-6 shadow-sm">
           <p className="font-bold">Error</p>
           <p>{error}</p>
         </div>
@@ -120,11 +137,11 @@ export default function Interviews() {
         <form onSubmit={handleSchedule} className="grid grid-cols-1 md:grid-cols-2 gap-5">
           
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Target Job</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Target Job Posting</label>
             <select
               value={form.jobId}
               onChange={(e) => setForm({ ...form, jobId: e.target.value, candidateId: "" })}
-              className="border border-gray-300 p-2.5 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+              className="border border-gray-300 p-2.5 rounded-lg w-full focus:ring-2 focus:ring-blue-500 outline-none"
               required
             >
               <option value="">Select a Posting</option>
@@ -135,7 +152,7 @@ export default function Interviews() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Shortlisted Candidate</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Candidate (Shortlisted)</label>
             <select
               value={form.candidateId}
               onChange={(e) => setForm({ ...form, candidateId: e.target.value })}
@@ -144,9 +161,9 @@ export default function Interviews() {
               required
             >
               <option value="">{form.jobId ? "Choose Candidate" : "Choose Job First"}</option>
-              {filteredCandidates.map(app => app?.userId && (
-                <option key={app.userId._id} value={app.userId._id}>
-                  {app.userId.name} ({app.userId.email})
+              {filteredCandidates.map(app => (
+                <option key={app.userId?._id} value={app.userId?._id}>
+                  {app.userId?.name}
                 </option>
               ))}
             </select>
@@ -175,17 +192,17 @@ export default function Interviews() {
           </div>
 
           <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Location / Link</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Location / Meeting Link</label>
             <input
               type="text"
-              placeholder="e.g. Zoom link or Office Room 202"
+              placeholder="e.g. Zoom Link or Office Room 202"
               value={form.location}
               onChange={(e) => setForm({ ...form, location: e.target.value })}
               className="border border-gray-300 p-2.5 rounded-lg w-full focus:ring-2 focus:ring-blue-500 outline-none"
             />
           </div>
 
-          <button type="submit" className="md:col-span-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors shadow-md">
+          <button type="submit" className="md:col-span-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-all shadow-md active:scale-95">
             Confirm & Notify Candidate
           </button>
         </form>
@@ -195,25 +212,24 @@ export default function Interviews() {
       <section>
         <h3 className="text-xl font-bold mb-5 text-gray-800">Current Schedule</h3>
         {interviews.length === 0 ? (
-          <div className="text-center py-10 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
-            <p className="text-gray-500">No active interviews found in your schedule.</p>
+          <div className="text-center py-12 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+            <p className="text-gray-500">No active interviews found for this account.</p>
           </div>
         ) : (
           <div className="space-y-4">
             {interviews.map(i => {
-              if (!i) return null; // Prevent crash on missing data
-
+              if (!i) return null;
               return (
-                <div key={i._id || Math.random()} className="bg-white border border-gray-200 p-5 rounded-xl shadow-sm hover:shadow-md transition-shadow flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                <div key={i._id} className="bg-white border border-gray-200 p-5 rounded-xl shadow-sm hover:shadow-md transition-all flex flex-col sm:flex-row justify-between sm:items-center gap-4">
                   <div className="flex-1">
-                    <h4 className="font-bold text-lg text-blue-900">{i.jobId?.title || "Deleted Job Posting"}</h4>
-                    <p className="text-gray-700 flex items-center gap-2">
-                      <span className="font-medium">Candidate:</span> {i.userId?.name || "Unknown"}
+                    <h4 className="font-bold text-lg text-blue-900">{i.jobId?.title || i.jobTitle || "Job Interview"}</h4>
+                    <p className="text-gray-700">
+                      <span className="font-semibold text-gray-500">Candidate:</span> {i.userId?.name || i.candidateName || "User"}
                     </p>
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-sm text-gray-500 italic">
-                      <span>📅 {i.date ? new Date(i.date).toLocaleDateString() : "No Date"}</span>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-sm text-gray-500">
+                      <span>📅 {i.date ? new Date(i.date).toLocaleDateString() : "TBD"}</span>
                       <span>⏰ {i.time || "TBD"}</span>
-                      <span>📍 {i.location || "TBD"}</span>
+                      <span className="truncate max-w-[200px]">📍 {i.location || "TBD"}</span>
                     </div>
                   </div>
 
@@ -222,7 +238,7 @@ export default function Interviews() {
                     {i.status === "scheduled" && (
                       <button
                         onClick={() => handleCancel(i._id)}
-                        className="text-sm font-semibold text-red-500 hover:text-red-700 border border-red-200 px-3 py-1 rounded-md hover:bg-red-50 transition-colors"
+                        className="text-sm font-bold text-red-500 hover:text-red-700 border border-red-100 px-3 py-1 rounded-md hover:bg-red-50 transition-colors"
                       >
                         Cancel
                       </button>
