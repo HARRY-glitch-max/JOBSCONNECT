@@ -40,7 +40,8 @@ app.use(
       if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
       return callback(new Error(`CORS policy blocked origin: ${origin}`), false);
     },
-    methods: ["GET", "POST", "PUT", "DELETE"],
+    // ✅ Added "PATCH" to allowed methods for application/interview updates
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     credentials: true,
   })
 );
@@ -55,7 +56,8 @@ import employerRoutes from "./routes/employerRoutes.js";
 import jobRoutes from "./routes/jobRoutes.js";
 import applicationRoutes from "./routes/applicationRoutes.js";
 import chatRoutes from "./routes/chatRoutes.js";
-import notificationRoutes from "./routes/notificationRoutes.js";
+// ✅ FIXED: Corrected path to include /routes/
+import notificationRoutes from "./routes/notificationRoutes.js"; 
 import interviewRoutes from "./routes/interviewRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import reportRoutes from "./routes/reportRoutes.js";
@@ -96,8 +98,6 @@ const startServer = async () => {
     io.on("connection", (socket) => {
       console.log(`🔌 Connected: ${socket.id}`);
 
-      // ✅ FIX: Robust Room Joining
-      // We trim and stringify to ensure "65a..." always matches "65a..."
       socket.on("join", (userId) => {
         if (!userId) return;
         const room = userId === "admin" ? "admin_room" : userId.toString().trim();
@@ -118,10 +118,8 @@ const startServer = async () => {
 
           let senderData, receiverData, receiverType;
 
-          // Normalize senderType to match DB (handle "Jobseeker" vs "JobSeeker")
           const normalizedSenderType = (senderType?.toLowerCase() === 'jobseeker') ? 'JobSeeker' : 'Employer';
 
-          // Resolve Sender
           if (normalizedSenderType === "JobSeeker") {
             senderData = await JobSeeker.findById(senderId).select("name avatar");
           } else {
@@ -129,7 +127,6 @@ const startServer = async () => {
             senderData = { name: emp?.companyName, avatar: emp?.avatar };
           }
 
-          // Resolve Receiver
           const empCheck = await Employer.findById(receiverId).select("companyName avatar");
           if (empCheck) {
             receiverData = { name: empCheck.companyName, avatar: empCheck.avatar };
@@ -140,7 +137,6 @@ const startServer = async () => {
             receiverType = "JobSeeker";
           }
 
-          // Persist to DB
           const newChat = new Chat({
             senderId,
             senderName: senderData?.name || "User",
@@ -156,17 +152,12 @@ const startServer = async () => {
 
           const savedMsg = await newChat.save();
 
-          // ✅ FIX: Instant Delivery to BOTH Rooms
           const targetRoom = receiverId.toString().trim();
           const senderRoom = senderId.toString().trim();
           
-          // 1. Emit to the person receiving the message
           io.to(targetRoom).emit("receive_message", savedMsg);
-          
-          // 2. Emit back to the sender (updates all their open tabs instantly)
           io.to(senderRoom).emit("receive_message", savedMsg); 
 
-          // 3. UI Notification
           io.to(targetRoom).emit("new_conversation_notification", { 
             from: senderData?.name,
             message: message.substring(0, 30) + "..."

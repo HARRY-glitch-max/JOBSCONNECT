@@ -2,21 +2,21 @@ import mongoose from "mongoose";
 
 const interviewSchema = new mongoose.Schema(
   {
-    // ✅ Matches "JobSeeker" model for smooth .populate()
+    // ✅ Links to JobSeeker
     userId: { 
       type: mongoose.Schema.Types.ObjectId, 
       ref: "JobSeeker", 
       required: true 
     },
     
-    // Links to the specific job posting
+    // ✅ Links to the specific job posting
     jobId: { 
       type: mongoose.Schema.Types.ObjectId, 
       ref: "Job", 
       required: true 
     },
     
-    // Links to the employer who scheduled it
+    // ✅ Links to the employer
     employerId: { 
       type: mongoose.Schema.Types.ObjectId, 
       ref: "Employer", 
@@ -29,36 +29,48 @@ const interviewSchema = new mongoose.Schema(
       required: true 
     },
     time: { 
-      type: String 
-    },
-    location: { 
-      type: String, 
+      type: String,
       required: true 
     },
+    location: { 
+      type: String, // Can be "Zoom", "Office Address", etc.
+      required: true 
+    },
+    meetingLink: {
+      type: String // Optional: For remote interviews
+    },
     
-    // ✅ Logic for Pass/Fail Buttons
-    // status: "scheduled" -> "completed" (once decision is made)
+    /**
+     * ✅ LOGIC UPDATE:
+     * We keep 'status' as 'scheduled' even after the interview.
+     * The 'result' field will tell the story of what happened.
+     */
     status: { 
       type: String, 
-      enum: ["scheduled", "completed", "cancelled"], 
+      enum: ["scheduled", "cancelled"], 
       default: "scheduled" 
     },
-    // result: "pending" -> "passed" OR "failed"
+
     result: { 
       type: String, 
-      enum: ["passed", "failed", "pending"], 
+      enum: ["pending", "passed", "failed"], 
       default: "pending" 
     }, 
     
-    // Employer notes (Why they passed/failed)
+    // Feedback/Notes visible to both parties
     feedback: { 
-      type: String 
+      type: String,
+      trim: true
     } 
   }, 
-  { timestamps: true } // Auto-generates createdAt and updatedAt
+  { timestamps: true }
 );
 
-// Prevent re-compilation errors during Nodemon restarts
+// Helpful Virtual (Optional): Checks if the interview date has passed
+interviewSchema.virtual('isPast').get(function() {
+  return new Date() > this.date;
+});
+
 const Interview = mongoose.models.Interview || mongoose.model("Interview", interviewSchema);
 
 export default Interview;

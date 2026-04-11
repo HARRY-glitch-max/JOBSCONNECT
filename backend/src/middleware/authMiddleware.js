@@ -5,7 +5,7 @@ import Admin from "../models/Admin.js";
 
 /**
  * 🛡️ Global Protection Middleware
- * Verifies JWT and attaches the correct user object + role to the request.
+ * Verifies JWT and attaches the correct user object + normalized role.
  */
 export const protect = async (req, res, next) => {
   let token;
@@ -19,37 +19,40 @@ export const protect = async (req, res, next) => {
 
       // 2. Optimized Account Fetching
       let account = null;
-      const userRole = decoded.role?.toLowerCase();
+      let detectedRole = decoded.role?.toLowerCase();
 
       // We use .lean() for performance since we don't need Mongoose save() methods here
-      if (userRole === "admin") {
+      if (detectedRole === "admin") {
         account = await Admin.findById(decoded.id).select("-password").lean();
-      } else if (userRole === "employer") {
+      } else if (detectedRole === "employer") {
         account = await Employer.findById(decoded.id).select("-password").lean();
-      } else if (userRole === "jobseeker") {
+      } else if (detectedRole === "jobseeker") {
         account = await User.findById(decoded.id).select("-password").lean();
       }
 
-      // Fallback: If role was missing in token (Safety Net)
+      // 3. Fallback: If role was missing in token or account not found in expected collection
       if (!account) {
         const [foundUser, foundEmployer, foundAdmin] = await Promise.all([
           User.findById(decoded.id).select("-password").lean(),
           Employer.findById(decoded.id).select("-password").lean(),
           Admin.findById(decoded.id).select("-password").lean(),
         ]);
-        account = foundUser || foundEmployer || foundAdmin;
+        
+        if (foundUser) { account = foundUser; detectedRole = "jobseeker"; }
+        else if (foundEmployer) { account = foundEmployer; detectedRole = "employer"; }
+        else if (foundAdmin) { account = foundAdmin; detectedRole = "admin"; }
       }
 
       if (!account) {
         return res.status(401).json({ message: "Account not found or session invalid." });
       }
 
-      // 3. Attach standard user object to request
-      // We ensure _id is a string and role is explicitly set
+      // 4. Attach standard user object to request
+      // We ensure _id is a string and the role is explicitly forced to the correct value
       req.user = {
         ...account,
         _id: account._id.toString(),
-        role: userRole || (account.companyName ? "employer" : account.isAdmin ? "admin" : "jobseeker"),
+        role: account.role || detectedRole, 
       };
 
       next();
@@ -85,10 +88,16 @@ export const adminProtect = (req, res, next) => {
  * Restricts access to Employer users only
  */
 export const employerProtect = (req, res, next) => {
-  // We check for both "employer" string and existence of companyName as a fallback
-  if (req.user && (req.user.role === "employer" || req.user.companyName)) {
+  // Ensure role is normalized for comparison
+  const role = req.user?.role?.toLowerCase();
+  
+  if (req.user && (role === "employer" || req.user.companyName)) {
     return next();
   }
+  
+  // Debugging log for development (remove in production if preferred)
+  console.warn(`403 Forbidden: User ${req.user?._id} attempted employer route with role: ${role}`);
+  
   return res.status(403).json({ message: "Access denied: Employers only." });
 };
 
@@ -96,7 +105,9 @@ export const employerProtect = (req, res, next) => {
  * Restricts access to Jobseekers only
  */
 export const jobseekerProtect = (req, res, next) => {
-  if (req.user && req.user.role === "jobseeker") {
+  const role = req.user?.role?.toLowerCase();
+  
+  if (req.user && role === "jobseeker") {
     return next();
   }
   return res.status(403).json({ message: "Access denied: Jobseekers only." });

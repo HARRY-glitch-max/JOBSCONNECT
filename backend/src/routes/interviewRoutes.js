@@ -1,4 +1,3 @@
-// routes/interviewRoutes.js
 import express from "express";
 import {
   bookInterview,
@@ -6,28 +5,53 @@ import {
   getInterviewsByUser,
   getInterviewById,
   submitInterviewResult,
-  getInterviewResult
+  deleteInterview
 } from "../controllers/interviewController.js";
 import { protect, employerProtect } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-// Employer books interview
-router.post("/book", employerProtect, bookInterview);
+/**
+ * @desc    Schedule a new interview
+ * @route   POST /api/interviews/job/:jobId
+ * @access  Employer Only
+ */
+// IMPORTANT: 'protect' MUST come before 'employerProtect' to populate req.user
+router.post("/job/:jobId", protect, employerProtect, bookInterview);
 
-// Employer views interviews for a job
+/**
+ * @desc    Update interview result (Pass/Fail) and add feedback
+ * @route   PATCH /api/interviews/:id/result
+ * @access  Employer Only
+ */
+router.patch("/:id/result", protect, employerProtect, submitInterviewResult);
+
+/**
+ * @desc    Get all interviews for a specific job
+ * @route   GET /api/interviews/job/:jobId
+ * @access  Employer/Admin
+ */
 router.get("/job/:jobId", protect, getInterviewsByJob);
 
-// Candidate views their interviews
+/**
+ * @desc    Get all interviews for a specific candidate
+ * @route   GET /api/interviews/user/:userId
+ * @access  Candidate/Admin
+ */
 router.get("/user/:userId", protect, getInterviewsByUser);
 
-// Get interview by ID
+/**
+ * @desc    Get single interview details
+ * @route   GET /api/interviews/:id
+ * @access  Protected
+ */
 router.get("/:id", protect, getInterviewById);
 
-// Employer submits interview result
-router.post("/:id/result", employerProtect, submitInterviewResult);
-
-// Candidate or employer views interview result
-router.get("/:id/result", protect, getInterviewResult);
+/**
+ * @desc    Cancel/Delete an interview
+ * @route   DELETE /api/interviews/:id
+ * @access  Employer Only
+ */
+router.delete("/:id", protect, employerProtect, deleteInterview);
 
 export default router;

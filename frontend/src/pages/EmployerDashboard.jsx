@@ -5,7 +5,7 @@ import {
   MessageSquare, PlusCircle, Briefcase, Users,
   Calendar, UserCircle, LogOut, Bell,
   TrendingUp, Sparkles, Search, Target,
-  Zap, Globe, ChevronRight
+  Zap, Globe, ChevronRight, BarChart3
 } from "lucide-react";
 
 import ChatPage from "./ChatPage"; 
@@ -75,25 +75,26 @@ export default function EmployerDashboard() {
   const getHeaderTitle = () => {
     if (location.state?.receiverName) return `Chat: ${location.state.receiverName}`;
     
-    const pathSegments = location.pathname.split("/").filter(Boolean);
-    const lastSegment = pathSegments[pathSegments.length - 1];
+    const path = location.pathname;
+    if (path.includes("/messages")) return "Message Center";
+    if (path.includes("/interviews")) return "Interview Schedule";
+    if (path.includes("/post-job")) return "Create New Opening";
+    if (path.includes("/my-jobs")) return "Job Listings";
+    if (path.includes("/applications")) return "Applicant Tracking";
+    if (path.includes("/reports")) return "Performance Analytics";
+    if (path.includes("/notifications")) return "Alerts & Updates";
     
-    const isId = /^[0-9a-fA-F]{24}$/.test(lastSegment);
-    if (isId || pathSegments.includes("messages")) return "Messages";
-    
-    return lastSegment
-      ?.replace(/-/g, " ")
-      .replace(/\b\w/g, (l) => l.toUpperCase()) || "Overview";
+    return "Dashboard Overview";
   };
 
   // --- 4. NAVIGATION CONFIG ---
   const navItems = [
-    { to: "reports", label: "Analytics", icon: <TrendingUp size={20} /> },
+    { to: "reports", label: "Analytics", icon: <BarChart3 size={20} /> },
     { to: "notifications", label: "Alerts", icon: <Bell size={20} />, badge: unreadCount },
     { to: "interviews", label: "Interviews", icon: <Calendar size={20} /> },
     { to: "messages", label: "Messages", icon: <MessageSquare size={20} /> },
-    { to: "post-job", label: "Create Job", icon: <PlusCircle size={20} /> },
-    { to: "my-jobs", label: "Manage Listings", icon: <Briefcase size={20} /> },
+    { to: "post-job", label: "Post a Job", icon: <PlusCircle size={20} /> },
+    { to: "my-jobs", label: "My Listings", icon: <Briefcase size={20} /> },
     { to: "applications", label: "Talent Pool", icon: <Users size={20} /> },
   ];
 
@@ -115,26 +116,26 @@ export default function EmployerDashboard() {
           </div>
         </div>
 
-        <nav className="flex-1 px-6 space-y-2 overflow-y-auto custom-scrollbar">
-          <p className="px-4 text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 mb-6">Navigation</p>
+        <nav className="flex-1 px-6 space-y-1 overflow-y-auto custom-scrollbar">
+          <p className="px-4 text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 mb-6">Main Menu</p>
           {navItems.map((item) => (
             <NavLink
               key={item.to}
               to={`/employer/dashboard/${item.to}`}
               className={({ isActive }) =>
-                `flex items-center justify-between px-5 py-4 rounded-[1.25rem] transition-all duration-500 group relative ${
+                `flex items-center justify-between px-5 py-4 rounded-[1.25rem] transition-all duration-300 group relative ${
                   isActive || (item.to === "messages" && location.pathname.includes("/messages"))
-                    ? "bg-white/10 text-white translate-x-2" 
+                    ? "bg-blue-600/10 text-blue-400 translate-x-2" 
                     : "text-slate-400 hover:text-slate-100 hover:bg-white/5"
                 }`
               }
             >
               <div className="flex items-center gap-4">
-                <span className="opacity-80 group-hover:scale-110 group-hover:text-blue-400 transition-all">{item.icon}</span>
+                <span className="group-hover:scale-110 transition-transform">{item.icon}</span>
                 <span className="font-bold text-sm tracking-tight">{item.label}</span>
               </div>
               {item.badge > 0 && (
-                <span className="bg-blue-600 text-white text-[10px] font-black px-2 py-0.5 rounded-lg animate-pulse">
+                <span className="bg-blue-600 text-white text-[10px] font-black px-2 py-0.5 rounded-lg">
                   {item.badge}
                 </span>
               )}
@@ -150,12 +151,12 @@ export default function EmployerDashboard() {
             </div>
             <div className="truncate">
               <p className="text-white font-bold text-sm truncate">{user?.companyName || "Organization"}</p>
-              <p className="text-blue-400 text-[10px] font-black uppercase tracking-widest">Premium Tier</p>
+              <p className="text-blue-400 text-[10px] font-black uppercase tracking-widest">Employer Hub</p>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <button onClick={() => goTo("profile")} className="py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 transition-all flex justify-center"><UserCircle size={18} /></button>
-            <button onClick={logout} className="py-3 rounded-xl bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white transition-all flex justify-center"><LogOut size={18} /></button>
+            <button onClick={() => goTo("profile")} className="py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 transition-all flex justify-center" title="Settings"><UserCircle size={18} /></button>
+            <button onClick={logout} className="py-3 rounded-xl bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white transition-all flex justify-center" title="Logout"><LogOut size={18} /></button>
           </div>
         </div>
       </aside>
@@ -164,7 +165,7 @@ export default function EmployerDashboard() {
       <main className="flex-1 flex flex-col overflow-hidden relative">
         <header className="h-24 flex items-center justify-between px-12 bg-white/60 backdrop-blur-xl border-b border-slate-100 sticky top-0 z-20">
           <div>
-            <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] mb-1">Current Workspace</p>
+            <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] mb-1">Employer Workspace</p>
             <h1 className="text-2xl font-black text-slate-900 tracking-tighter">
               {getHeaderTitle()}
             </h1>
@@ -186,14 +187,14 @@ export default function EmployerDashboard() {
               <div className="hidden sm:block">
                 <p className="text-[10px] font-black text-slate-400 uppercase leading-none mb-1">Status</p>
                 <p className="text-xs font-bold text-emerald-500 flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span> System Live
+                  <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span> Cloud Active
                 </p>
               </div>
             </div>
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-12 bg-[#F8FAFC]">
+        <div className="flex-1 overflow-y-auto p-8 lg:p-12 bg-[#F8FAFC]">
           <AnimatePresence mode="wait">
             <Routes location={location} key={location.pathname}>
               <Route path="messages" element={<PageTransition><ChatPage /></PageTransition>} />
@@ -221,54 +222,58 @@ function DefaultOverview({ user, goTo }) {
       className="max-w-7xl mx-auto space-y-12"
     >
       <div className="grid lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 relative overflow-hidden bg-white rounded-[3rem] p-16 shadow-[0_40px_100px_-20px_rgba(0,0,0,0.04)] border border-slate-100 group">
-          <div className="absolute top-0 right-0 w-96 h-96 bg-blue-50 rounded-full -mr-32 -mt-32 blur-3xl opacity-50 group-hover:opacity-80 transition-opacity duration-1000"></div>
+        <div className="lg:col-span-2 relative overflow-hidden bg-white rounded-[3rem] p-12 lg:p-16 shadow-[0_40px_100px_-20px_rgba(0,0,0,0.04)] border border-slate-100 group">
+          <div className="absolute top-0 right-0 w-96 h-96 bg-blue-50 rounded-full -mr-32 -mt-32 blur-3xl opacity-50"></div>
           
           <div className="relative z-10">
             <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-blue-50 text-blue-600 text-[10px] font-black uppercase tracking-widest mb-10 border border-blue-100">
-              <Sparkles size={14} /> AI Talent Matching Active
+              <Sparkles size={14} /> AI Recruitment Suite
             </div>
-            <h2 className="text-6xl font-black text-slate-900 mb-8 leading-[0.9] tracking-tight">
-              Build your <br/>
-              <span className="text-blue-600">Product Team.</span>
+            <h2 className="text-5xl lg:text-6xl font-black text-slate-900 mb-8 leading-[0.9] tracking-tight">
+              Scale your <br/>
+              <span className="text-blue-600">Organization.</span>
             </h2>
-            <p className="text-slate-500 text-xl mb-12 font-medium max-w-lg leading-relaxed">
-              Welcome back, {user?.companyName || 'Partner'}. You have active listings and new talent is waiting for review.
+            <p className="text-slate-500 text-lg lg:text-xl mb-12 font-medium max-w-lg leading-relaxed">
+              Hello, {user?.companyName || 'Partner'}. You have new applicants and scheduled sessions requiring your attention today.
             </p>
-            <div className="flex gap-4">
-              <Button onClick={() => goTo("post-job")} className="bg-slate-900 hover:bg-blue-600 text-white px-10 py-5 rounded-2xl font-black flex items-center gap-3 transition-all shadow-2xl shadow-slate-200">
+            <div className="flex flex-wrap gap-4">
+              <Button onClick={() => goTo("post-job")} className="bg-slate-900 hover:bg-blue-600 text-white px-8 py-4 rounded-2xl font-black flex items-center gap-3 transition-all shadow-xl shadow-slate-200">
                 <PlusCircle size={20} /> Post Opening
               </Button>
-              <Button onClick={() => goTo("reports")} variant="outline" className="border-slate-200 text-slate-900 hover:bg-slate-50 px-10 py-5 rounded-2xl font-black transition-all">
-                Analytics
+              <Button onClick={() => goTo("interviews")} variant="outline" className="border-slate-200 text-slate-900 hover:bg-slate-50 px-8 py-4 rounded-2xl font-black transition-all">
+                View Calendar
               </Button>
             </div>
           </div>
         </div>
 
-        <div className="bg-[#0A0F1D] rounded-[3rem] p-12 text-white flex flex-col justify-between relative overflow-hidden shadow-3xl">
+        <div className="bg-[#0A0F1D] rounded-[3rem] p-10 lg:p-12 text-white flex flex-col justify-between relative overflow-hidden shadow-3xl">
           <div className="absolute bottom-0 right-0 w-64 h-64 bg-blue-600/20 blur-[80px]"></div>
           <div>
-            <h4 className="text-2xl font-black tracking-tight mb-2">Hiring Rate</h4>
-            <p className="text-slate-500 font-bold text-sm italic">Growth vs last month</p>
+            <h4 className="text-2xl font-black tracking-tight mb-2">Hiring Velocity</h4>
+            <p className="text-slate-500 font-bold text-sm italic">Candidate pipeline health</p>
           </div>
           <div className="mt-10">
             <span className="text-7xl font-black tracking-tighter text-blue-500">84%</span>
             <div className="flex items-center gap-2 text-emerald-400 font-black text-xs uppercase tracking-widest mt-4">
-                <TrendingUp size={16} /> +12.5% Growth
+                <TrendingUp size={16} /> Optimized Flow
             </div>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-8">
         {[
-          { label: "Active Listings", value: "12", color: "text-blue-600", bg: "bg-blue-50", icon: <Briefcase /> },
-          { label: "Total Applicants", value: "154", color: "text-slate-900", bg: "bg-slate-100", icon: <Users /> },
-          { label: "Scheduled", value: "08", color: "text-indigo-600", bg: "bg-indigo-50", icon: <Calendar /> },
-          { label: "Talent Score", value: "9.2", color: "text-blue-600", bg: "bg-blue-50", icon: <Target /> },
+          { label: "Active Jobs", value: "12", color: "text-blue-600", bg: "bg-blue-50", icon: <Briefcase />, path: "my-jobs" },
+          { label: "New Talent", value: "154", color: "text-slate-900", bg: "bg-slate-100", icon: <Users />, path: "applications" },
+          { label: "Interviews", value: "08", color: "text-indigo-600", bg: "bg-indigo-50", icon: <Calendar />, path: "interviews" },
+          { label: "Messages", value: "03", color: "text-emerald-600", bg: "bg-emerald-50", icon: <MessageSquare />, path: "messages" },
         ].map((stat, i) => (
-          <div key={i} className="bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-2xl transition-all duration-500 group cursor-pointer border-b-4 border-b-transparent hover:border-b-blue-600">
+          <div 
+            key={i} 
+            onClick={() => goTo(stat.path)}
+            className="bg-white p-8 lg:p-10 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-2xl hover:-translate-y-1 transition-all duration-500 group cursor-pointer border-b-4 border-b-transparent hover:border-b-blue-600"
+          >
             <div className={`w-14 h-14 ${stat.bg} ${stat.color} rounded-2xl flex items-center justify-center mb-8 group-hover:scale-110 transition-transform`}>
               {stat.icon}
             </div>

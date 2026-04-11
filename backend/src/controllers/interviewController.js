@@ -4,7 +4,10 @@ import Notification from "../models/Notification.js";
 import mongoose from "mongoose";
 import { notifyJobseeker } from "../utils/notifyJobseeker.js";
 
-// Employer books interview slot for a shortlisted candidate
+/**
+ * @desc    Employer books interview slot for a shortlisted candidate
+ * @route   POST /api/interviews/book/:jobId
+ */
 export const bookInterview = async (req, res) => {
   try {
     const { jobId } = req.params;
@@ -28,7 +31,7 @@ export const bookInterview = async (req, res) => {
       return res.status(400).json({ message: "Candidate must be shortlisted before booking." });
     }
 
-    // 2. Create Interview
+    // 2. Create Interview (Result starts as 'pending')
     const interview = await Interview.create({
       userId: applicantId,
       jobId,
@@ -36,7 +39,8 @@ export const bookInterview = async (req, res) => {
       date: new Date(date),
       time,
       location,
-      status: "scheduled"
+      status: "scheduled", 
+      result: "pending"
     });
 
     // 3. Create Notifications
@@ -53,7 +57,7 @@ export const bookInterview = async (req, res) => {
       }
     ]);
 
-    // 4. Send Email (Non-blocking or simple await)
+    // 4. Send Email Notification
     try {
       await notifyJobseeker({
         email: application.userId.email,
@@ -62,22 +66,25 @@ export const bookInterview = async (req, res) => {
         message: `Your interview for ${application.jobId.title} is scheduled on ${date} at ${location}.`,
       });
     } catch (emailErr) {
-      console.error("Email notification failed, but interview was booked:", emailErr);
+      console.error("Email notification failed:", emailErr);
     }
 
     res.status(201).json({ message: "Interview booked successfully", interview });
 
   } catch (error) {
-    console.error("Booking Error:", error);
     res.status(500).json({ message: error.message });
   }
 };
 
-// Employer submits interview result
+/**
+ * @desc    Employer submits interview result (Passed/Failed)
+ * @route   PATCH /api/interviews/:id/result
+ */
 export const submitInterviewResult = async (req, res) => {
   try {
     const { id } = req.params;
     const { result, feedback } = req.body;
+    const employerId = req.user?._id;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ message: "Invalid ID format" });
@@ -91,25 +98,31 @@ export const submitInterviewResult = async (req, res) => {
       return res.status(404).json({ message: "Interview not found" });
     }
 
+    // Authorization: Only the employer who booked it can result it
+    if (interview.employerId.toString() !== employerId.toString()) {
+      return res.status(403).json({ message: "Not authorized to update this interview." });
+    }
+
+    // ✅ Update result but keep status as 'scheduled'
     interview.result = result;
     interview.feedback = feedback;
-    interview.status = "completed";
+    
     await interview.save();
 
-    // Create Notification
+    // Notify Jobseeker
     await Notification.create({
       userId: interview.userId._id,
       type: "interview_result",
       content: `Your interview result for ${interview.jobId.title} is: ${result}.`
     });
 
-    // Send Email
+    // Email Notification
     try {
       await notifyJobseeker({
         email: interview.userId.email,
         name: interview.userId.name,
-        subject: "Interview Result",
-        message: `Your result for ${interview.jobId.title} is: ${result}. Feedback: ${feedback || "None."}`,
+        subject: "Interview Result Updated",
+        message: `Your result for ${interview.jobId.title} is: ${result}. Feedback: ${feedback || "None provided."}`,
       });
     } catch (emailErr) {
       console.error("Result email failed:", emailErr);
@@ -122,13 +135,44 @@ export const submitInterviewResult = async (req, res) => {
   }
 };
 
-// --- View Controllers (Stay the same) ---
+/**
+ * @desc    Employer cancels and deletes an interview
+ * @route   DELETE /api/interviews/:id
+ */
+export const deleteInterview = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const employerId = req.user?._id;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid ID format" });
+    }
+
+    const interview = await Interview.findById(id);
+
+    if (!interview) {
+      return res.status(404).json({ message: "Interview not found" });
+    }
+
+    if (interview.employerId.toString() !== employerId.toString()) {
+      return res.status(403).json({ message: "Not authorized to delete this interview." });
+    }
+
+    await Interview.findByIdAndDelete(id);
+    res.json({ message: "Interview deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// --- View Controllers ---
 
 export const getInterviewsByJob = async (req, res) => {
   try {
     const interviews = await Interview.find({ jobId: req.params.jobId })
       .populate("userId", "name email")
-      .populate("jobId", "title");
+      .populate("jobId", "title")
+      .sort({ createdAt: -1 });
     res.json(interviews);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -138,8 +182,9 @@ export const getInterviewsByJob = async (req, res) => {
 export const getInterviewsByUser = async (req, res) => {
   try {
     const interviews = await Interview.find({ userId: req.params.userId })
-      .populate("jobId", "title description")
-      .populate("userId", "email");
+      .populate("jobId", "title")
+      .populate("employerId", "companyName")
+      .sort({ date: 1 });
     res.json(interviews);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -148,31 +193,13 @@ export const getInterviewsByUser = async (req, res) => {
 
 export const getInterviewById = async (req, res) => {
   try {
-    const { id } = req.params;
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ message: "Invalid interview ID format" });
-    }
-    const interview = await Interview.findById(id)
+    const interview = await Interview.findById(req.params.id)
       .populate("jobId", "title")
-      .populate("userId", "name email");
+      .populate("userId", "name email")
+      .populate("employerId", "companyName email");
 
     if (!interview) return res.status(404).json({ message: "Interview not found" });
     res.json(interview);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-export const getInterviewResult = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const interview = await Interview.findById(id);
-
-    if (!interview || !interview.result) {
-      return res.status(404).json({ message: "Interview result not available" });
-    }
-
-    res.json({ result: interview.result, feedback: interview.feedback });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
