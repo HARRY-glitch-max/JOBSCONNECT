@@ -1,6 +1,7 @@
 import express from "express";
 import {
   bookInterview,
+  getInterviewsByEmployer, // <--- New Import
   getInterviewsByJob,
   getInterviewsByUser,
   getInterviewById,
@@ -16,8 +17,14 @@ const router = express.Router();
  * @route   POST /api/interviews/job/:jobId
  * @access  Employer Only
  */
-// IMPORTANT: 'protect' MUST come before 'employerProtect' to populate req.user
 router.post("/job/:jobId", protect, employerProtect, bookInterview);
+
+/**
+ * @desc    Fetch all interviews for an Employer (Consolidated Dashboard)
+ * @route   GET /api/interviews/employer/:employerId
+ * @access  Employer Only
+ */
+router.get("/employer/:employerId", protect, employerProtect, getInterviewsByEmployer);
 
 /**
  * @desc    Update interview result (Pass/Fail) and add feedback

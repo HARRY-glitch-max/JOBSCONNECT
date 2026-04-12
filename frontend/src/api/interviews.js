@@ -3,11 +3,19 @@ import apiClient from './client';
 /**
  * @desc Create/Schedule a new interview
  * @route POST /api/interviews/job/:jobId
- * @param {string} jobId 
- * @param {object} payload - { applicantId, date, time, location }
  */
 export const bookInterview = async (jobId, payload) => {
   const { data } = await apiClient.post(`/interviews/job/${jobId}`, payload);
+  return data;
+};
+
+/**
+ * NEW: Fetch ALL interviews for an Employer across all jobs
+ * This is the missing piece for your dashboard fetching!
+ * @route GET /api/interviews/employer/:employerId
+ */
+export const getInterviewsByEmployer = async (employerId) => {
+  const { data } = await apiClient.get(`/interviews/employer/${employerId}`);
   return data;
 };
 
@@ -41,11 +49,8 @@ export const getInterviewById = async (id) => {
 /**
  * @desc Update the interview result (Pass/Fail) with feedback
  * @route PATCH /api/interviews/:id/result
- * @param {string} id - The Interview ID
- * @param {object} payload - { result: 'passed' | 'failed', feedback: string }
  */
 export const updateInterviewResult = async (id, payload) => {
-  // Logic: Payload must contain both 'result' and 'feedback'
   const { data } = await apiClient.patch(`/interviews/${id}/result`, payload);
   return data;
 };

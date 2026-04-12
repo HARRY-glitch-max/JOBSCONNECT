@@ -23,7 +23,8 @@ import {
   Send,
   CheckCircle2,
   XCircle,
-  Info
+  Info,
+  Users // Added for Bulk Icon
 } from "lucide-react";
 
 export default function EmployerInterviews() {
@@ -37,15 +38,18 @@ export default function EmployerInterviews() {
   const [error, setError] = useState("");
   const [filter, setFilter] = useState("all");
 
+  // --- NEW: DUAL MODE STATE ---
+  const [isBulkMode, setIsBulkMode] = useState(false);
+  const [selectedCandidates, setSelectedCandidates] = useState([]); // Array for bulk
+
   // Feedback Modal State
   const [showModal, setShowModal] = useState(false);
   const [selectedInterview, setSelectedInterview] = useState(null);
-  const [decisionType, setDecisionType] = useState(""); // 'passed' or 'failed'
+  const [decisionType, setDecisionType] = useState(""); 
   const [feedbackText, setFeedbackText] = useState("");
 
   const [form, setForm] = useState({ 
     jobId: "", 
-    candidateId: "", 
     date: "", 
     time: "", 
     location: "" 
@@ -84,7 +88,7 @@ export default function EmployerInterviews() {
   const openDecisionModal = (interview, type) => {
     setSelectedInterview(interview);
     setDecisionType(type);
-    setFeedbackText(""); // Clear previous input
+    setFeedbackText(""); 
     setShowModal(true);
   };
 
@@ -100,25 +104,43 @@ export default function EmployerInterviews() {
         feedback: feedbackText 
       });
       setShowModal(false);
-      fetchData(); // Refresh list to show updated status and feedback
+      fetchData(); 
     } catch (err) {
       setError("Could not update decision.");
     }
   };
 
+  // --- UPDATED: HANDLES BOTH SINGLE AND BULK ---
   const handleSchedule = async (e) => {
     e.preventDefault();
+    
+    if (selectedCandidates.length === 0) {
+      alert("Please select at least one candidate.");
+      return;
+    }
+
     try {
-      await bookInterview(form.jobId, {
-        applicantId: form.candidateId,
-        date: form.date,
-        time: form.time,
-        location: form.location || "Online/TBD",
-      });
-      setForm({ jobId: "", candidateId: "", date: "", time: "", location: "" });
+      setLoading(true);
+      // Map through all selected candidates and book individually
+      const bookingPromises = selectedCandidates.map(cId => 
+        bookInterview(form.jobId, {
+          applicantId: cId,
+          date: form.date,
+          time: form.time,
+          location: form.location || "Online/TBD",
+        })
+      );
+
+      await Promise.all(bookingPromises);
+      
+      setForm({ jobId: "", date: "", time: "", location: "" });
+      setSelectedCandidates([]);
       fetchData();
+      alert(`Successfully dispatched ${selectedCandidates.length} invite(s).`);
     } catch (err) {
       setError(err.response?.data?.message || "Scheduling error.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -158,26 +180,84 @@ export default function EmployerInterviews() {
 
       {/* SCHEDULING FORM */}
       <section className="bg-white p-8 rounded-[3rem] shadow-xl shadow-slate-200/50 border border-slate-100">
-        <h3 className="text-xl font-black mb-8 text-slate-800 flex items-center gap-3">
-          <PlusCircle className="text-blue-600" /> Schedule New Session
-        </h3>
+        <div className="flex justify-between items-center mb-8">
+          <h3 className="text-xl font-black text-slate-800 flex items-center gap-3">
+            <PlusCircle className="text-blue-600" /> {isBulkMode ? "Bulk Invitation" : "Schedule New Session"}
+          </h3>
+          
+          {/* MODE TOGGLE */}
+          <button 
+            onClick={() => {
+              setIsBulkMode(!isBulkMode);
+              setSelectedCandidates([]); // Reset selection on switch
+            }}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all border-2 ${isBulkMode ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-white border-slate-100 text-slate-400'}`}
+          >
+            <Users size={14} /> {isBulkMode ? "Switch to Single" : "Switch to Bulk"}
+          </button>
+        </div>
+
         <form onSubmit={handleSchedule} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <div className="space-y-2">
             <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Job Role</label>
-            <select value={form.jobId} onChange={(e) => setForm({ ...form, jobId: e.target.value, candidateId: "" })} className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl text-sm font-bold focus:border-blue-500 focus:bg-white outline-none transition-all" required>
+            <select 
+              value={form.jobId} 
+              onChange={(e) => {
+                setForm({ ...form, jobId: e.target.value });
+                setSelectedCandidates([]);
+              }} 
+              className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl text-sm font-bold focus:border-blue-500 focus:bg-white outline-none transition-all" 
+              required
+            >
               <option value="">Select posting</option>
               {jobs.map(job => <option key={job._id} value={job._id}>{job.title}</option>)}
             </select>
           </div>
+
           <div className="space-y-2">
             <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Shortlisted Talent</label>
-            <select value={form.candidateId} onChange={(e) => setForm({ ...form, candidateId: e.target.value })} className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl text-sm font-bold focus:border-blue-500 focus:bg-white outline-none transition-all disabled:opacity-50" disabled={!form.jobId} required>
-              <option value="">Select candidate</option>
-              {applications.filter(app => String(app.jobId?._id || app.jobId) === String(form.jobId)).map(app => (
-                <option key={app.userId?._id} value={app.userId?._id}>{app.userId?.fullName || app.userId?.name}</option>
-              ))}
-            </select>
+            <div className="relative">
+              {isBulkMode ? (
+                // BULK SELECTOR (Multiple Items)
+                <div className="w-full p-2 bg-slate-50 border-2 border-transparent rounded-2xl min-h-[58px] flex flex-wrap gap-2">
+                   {!form.jobId ? (
+                     <p className="text-[10px] font-bold text-slate-300 m-auto">Select a job first</p>
+                   ) : (
+                    applications.filter(app => String(app.jobId?._id || app.jobId) === String(form.jobId)).map(app => (
+                      <button
+                        type="button"
+                        key={app.userId?._id}
+                        onClick={() => {
+                          const id = app.userId?._id;
+                          setSelectedCandidates(prev => 
+                            prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+                          );
+                        }}
+                        className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all border ${selectedCandidates.includes(app.userId?._id) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-400 border-slate-200 hover:border-blue-300'}`}
+                      >
+                        {app.userId?.fullName || app.userId?.name}
+                      </button>
+                    ))
+                   )}
+                </div>
+              ) : (
+                // SINGLE SELECTOR (Standard Select)
+                <select 
+                  value={selectedCandidates[0] || ""} 
+                  onChange={(e) => setSelectedCandidates([e.target.value])} 
+                  className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl text-sm font-bold focus:border-blue-500 focus:bg-white outline-none transition-all disabled:opacity-50" 
+                  disabled={!form.jobId} 
+                  required
+                >
+                  <option value="">Select candidate</option>
+                  {applications.filter(app => String(app.jobId?._id || app.jobId) === String(form.jobId)).map(app => (
+                    <option key={app.userId?._id} value={app.userId?._id}>{app.userId?.fullName || app.userId?.name}</option>
+                  ))}
+                </select>
+              )}
+            </div>
           </div>
+
           <div className="space-y-2">
             <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Location / Link</label>
             <input type="text" placeholder="Zoom link or Office address" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl text-sm font-bold focus:border-blue-500 focus:bg-white outline-none transition-all" />
@@ -191,7 +271,7 @@ export default function EmployerInterviews() {
             <input type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl text-sm font-bold focus:border-blue-500 focus:bg-white outline-none transition-all" required />
           </div>
           <button type="submit" className="lg:mt-8 bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-2xl transition-all shadow-xl shadow-blue-200 active:scale-95 text-xs uppercase tracking-widest">
-            Dispatch Invite
+            {isBulkMode ? `Dispatch ${selectedCandidates.length} Invites` : "Dispatch Invite"}
           </button>
         </form>
       </section>
@@ -293,10 +373,9 @@ export default function EmployerInterviews() {
                   className="w-full p-5 bg-slate-50 border-none rounded-[2rem] text-sm font-medium outline-none focus:ring-2 focus:ring-slate-200 transition-all resize-none shadow-inner"
                 />
                 <div className="flex items-center gap-2 mt-2 text-blue-600 bg-blue-50 p-3 rounded-xl">
-                  <Info size={14} className="shrink-0" />
-                  <p className="text-[10px] font-bold leading-tight">
+                  <span className="text-[10px] font-bold leading-tight">
                     This note is shared with the applicant immediately. Be professional and constructive.
-                  </p>
+                  </span>
                 </div>
               </div>
 
