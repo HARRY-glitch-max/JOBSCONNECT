@@ -16,15 +16,12 @@ cloudinary.config({
 export const checkApplicationStatus = async (req, res) => {
   try {
     const { userId, jobId } = req.params;
-
     if (!mongoose.Types.ObjectId.isValid(userId) || !mongoose.Types.ObjectId.isValid(jobId)) {
       return res.status(400).json({ message: "Invalid IDs provided" });
     }
-
     const application = await Application.findOne({ userId, jobId }).select("_id");
     res.status(200).json({ applied: !!application });
   } catch (error) {
-    console.error("Error in checkApplicationStatus:", error);
     res.status(500).json({ message: "Server error checking status" });
   }
 };
@@ -33,24 +30,15 @@ export const checkApplicationStatus = async (req, res) => {
 export const createApplication = async (req, res) => {
   try {
     const { jobId, userId, skills, bio } = req.body;
-
     const existingApp = await Application.findOne({ jobId, userId });
-    if (existingApp) {
-      return res.status(400).json({ message: "You have already applied for this position." });
-    }
+    if (existingApp) return res.status(400).json({ message: "Already applied." });
 
-    if (!req.file) {
-      return res.status(400).json({ message: "Please upload your resume (PDF/DOCX)" });
-    }
-
-    if (!skills || !bio) {
-      return res.status(400).json({ message: "Please provide both your skills and a short bio." });
-    }
+    if (!req.file) return res.status(400).json({ message: "Please upload your resume." });
+    if (!skills || !bio) return res.status(400).json({ message: "Skills and bio required." });
 
     const job = await Job.findById(jobId).select("employerId title");
     if (!job) return res.status(404).json({ message: "Job not found" });
 
-    // Cloudinary Upload
     const result = await new Promise((resolve, reject) => {
       const stream = cloudinary.uploader.upload_stream(
         { folder: "resumes", resource_type: "raw" },
@@ -69,59 +57,78 @@ export const createApplication = async (req, res) => {
     });
 
     await newApp.save();
-
-    // Update Jobseeker profile snapshot
     await Jobseeker.findByIdAndUpdate(userId, { bio, skills: newApp.skills });
 
     const application = await Application.findById(newApp._id)
-      .populate("userId", "name email avatar")
+      .populate("userId", "name email")
       .populate("jobId", "title");
 
     if (application.userId?.email) {
       await notifyJobseeker({
         email: application.userId.email,
         name: application.userId.name,
-        subject: "Application Successfully Received",
-        message: `Thank you for applying for the "${job.title}" position.`,
+        subject: "Application Received",
+        message: `Thank you for applying for "${job.title}".`,
       });
     }
 
-    res.status(201).json({ message: "Application submitted successfully!", application });
+    res.status(201).json({ message: "Application submitted!", application });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
-// --- 2. Update application status ---
+// --- 2. Update status (Hire/Reject/Interview) ---
 export const updateApplicationStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, feedback } = req.body;
 
-    const application = await Application.findByIdAndUpdate(id, { status }, { new: true })
-      .populate("userId", "name email avatar")
+    const application = await Application.findByIdAndUpdate(
+      id, 
+      { status, finalFeedback: feedback }, 
+      { new: true }
+    )
+      .populate("userId", "name email")
       .populate("jobId", "title");
 
     if (!application) return res.status(404).json({ message: "Application not found" });
 
+    // 1. Create Dashboard Notification
+    let content = `Update: Your application status for "${application.jobId.title}" is now ${status}.`;
+    if (status === "hired") content = `Congratulations! You have been HIRED for "${application.jobId.title}"!`;
+    if (status === "unsuccessful") content = `Update: Your application for "${application.jobId.title}" was not successful at this time.`;
+
     await Notification.create({
       userId: application.userId._id,
       type: "application_status",
-      content: `Update: Your application status for "${application.jobId.title}" is now ${status}.`,
+      content,
     });
 
-    res.json({ message: "Status updated", application });
+    // 2. Automated Email
+    try {
+      await notifyJobseeker({
+        email: application.userId.email,
+        name: application.userId.name,
+        subject: status === "hired" ? "Job Offer Received!" : "Application Update",
+        message: content + (feedback ? ` Feedback: ${feedback}` : ""),
+      });
+    } catch (err) {
+      console.error("Email failed:", err);
+    }
+
+    res.json({ message: `Application marked as ${status}`, application });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
-// --- 3. Shortlist candidate (FIX: Restored missing export) ---
+// --- 3. Shortlist candidate ---
 export const shortlistCandidate = async (req, res) => {
   try {
     const { id } = req.params;
     const application = await Application.findById(id)
-      .populate("userId", "name email avatar")
+      .populate("userId", "name email")
       .populate("jobId", "title");
 
     if (!application) return res.status(404).json({ message: "Application not found" });
@@ -142,7 +149,8 @@ export const shortlistCandidate = async (req, res) => {
   }
 };
 
-// --- 4. Get application by ID (Detailed View) ---
+// --- View & Helper Controllers (Keep as they were) ---
+
 export const getApplicationById = async (req, res) => {
   try {
     const application = await Application.findById(req.params.id)
@@ -151,15 +159,11 @@ export const getApplicationById = async (req, res) => {
         path: "jobId",
         populate: { path: "employerId", select: "companyName avatar" }
       });
-    
     if (!application) return res.status(404).json({ message: "Application not found" });
     res.json(application);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
+  } catch (error) { res.status(500).json({ message: error.message }); }
 };
 
-// --- 5. Get applications by User (Jobseeker Side) ---
 export const getApplicationsByUser = async (req, res) => {
   try {
     const applications = await Application.find({ userId: req.params.userId })
@@ -173,7 +177,6 @@ export const getApplicationsByUser = async (req, res) => {
   } catch (error) { res.status(500).json({ message: error.message }); }
 };
 
-// --- 6. Get applications by Employer (Talent Pipeline View) ---
 export const getApplicationsByEmployer = async (req, res) => {
   try {
     const { employerId } = req.params;
@@ -181,14 +184,10 @@ export const getApplicationsByEmployer = async (req, res) => {
       .sort({ createdAt: -1 })
       .populate("userId", "name email avatar bio skills") 
       .populate("jobId", "title location type");
-
     res.status(200).json(applications);
-  } catch (error) {
-    res.status(500).json({ message: "Server error fetching pipeline" });
-  }
+  } catch (error) { res.status(500).json({ message: "Server error fetching pipeline" }); }
 };
 
-// --- 7. Get applications by Job ID ---
 export const getApplicationsByJob = async (req, res) => {
   try {
     const applications = await Application.find({ jobId: req.params.jobId })
@@ -197,19 +196,15 @@ export const getApplicationsByJob = async (req, res) => {
   } catch (error) { res.status(500).json({ message: error.message }); }
 };
 
-// --- 8. Admin: Get ALL applications (FIX: Restored missing export) ---
 export const getApplications = async (req, res) => {
   try {
     const applications = await Application.find()
       .populate("userId", "name email bio skills")
       .populate("jobId", "title");
     res.json(applications);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
+  } catch (error) { res.status(500).json({ message: error.message }); }
 };
 
-// --- 9. Delete Application ---
 export const deleteApplication = async (req, res) => {
   try {
     const application = await Application.findByIdAndDelete(req.params.id);
