@@ -3,11 +3,15 @@ import Job from "../models/Job.js";
 import Interview from "../models/Interview.js";
 import Application from "../models/Application.js";
 import generateToken from "../utils/generateToken.js";
-import axios from "axios"; 
+import axios from "axios";
 
 // =======================
-// Register employer
+// Auth & Identity
 // =======================
+
+/**
+ * @desc Register employer (Kenyan Only + Geo-fencing)
+ */
 export const createEmployer = async (req, res) => {
   try {
     const { companyName, industry, contactInformation, password, nationality } = req.body;
@@ -57,9 +61,9 @@ export const createEmployer = async (req, res) => {
   }
 };
 
-// =======================
-// Login employer
-// =======================
+/**
+ * @desc Login employer
+ */
 export const loginEmployer = async (req, res) => {
   try {
     let { email, password } = req.body;
@@ -83,8 +87,64 @@ export const loginEmployer = async (req, res) => {
 };
 
 // =======================
+// Profile Management (NEW)
+// =======================
+
+/**
+ * @desc Get current logged-in employer profile
+ */
+export const getEmployerProfile = async (req, res) => {
+  try {
+    const employer = await Employer.findById(req.user._id).select("-password");
+    if (!employer) return res.status(404).json({ message: "Employer not found" });
+    res.json(employer);
+  } catch (err) {
+    res.status(500).json({ message: "Error fetching profile." });
+  }
+};
+
+/**
+ * @desc Update current logged-in employer profile
+ */
+export const updateEmployerProfile = async (req, res) => {
+  try {
+    const employer = await Employer.findById(req.user._id);
+    if (!employer) return res.status(404).json({ message: "Employer not found" });
+
+    // Update top-level fields
+    employer.companyName = req.body.companyName || employer.companyName;
+    employer.industry = req.body.industry || employer.industry;
+
+    // Update nested contactInformation
+    if (req.body.contactInformation) {
+      employer.contactInformation = {
+        email: req.body.contactInformation.email?.toLowerCase() || employer.contactInformation.email,
+        phone: req.body.contactInformation.phone || employer.contactInformation.phone,
+        address: req.body.contactInformation.address || employer.contactInformation.address,
+      };
+    }
+
+    if (req.body.password) {
+      employer.password = req.body.password;
+    }
+
+    const updatedEmployer = await employer.save();
+    
+    // Return sanitized object
+    const result = updatedEmployer.toObject();
+    delete result.password;
+    
+    res.json(result);
+  } catch (err) {
+    console.error("Profile Update Error:", err);
+    res.status(500).json({ message: "Failed to update profile." });
+  }
+};
+
+// =======================
 // Analytics
 // =======================
+
 export const getEmployerReports = async (req, res) => {
   try {
     const employerId = req.user?._id; 
@@ -111,8 +171,9 @@ export const getEmployerReports = async (req, res) => {
 };
 
 // =======================
-// CRUD Operations
+// CRUD (Admin/Public)
 // =======================
+
 export const getEmployers = async (req, res) => {
   try {
     const employers = await Employer.find().select("-password");
@@ -132,6 +193,7 @@ export const getEmployerById = async (req, res) => {
   }
 };
 
+// Keep updateEmployer for Admin use (updates by URL ID)
 export const updateEmployer = async (req, res) => {
   try {
     const employer = await Employer.findByIdAndUpdate(req.params.id, req.body, { new: true });
@@ -153,6 +215,7 @@ export const deleteEmployer = async (req, res) => {
 // =======================
 // Jobs & Interviews
 // =======================
+
 export const getEmployerJobs = async (req, res) => {
   try {
     const employerId = req.user?._id;
@@ -182,19 +245,14 @@ export const getEmployerInterviews = async (req, res) => {
   }
 };
 
-// ✅ NEW: Update Interview Result (Pass/Fail)
 export const updateInterviewStatus = async (req, res) => {
   try {
-    const { id } = req.params; // Interview ID
+    const { id } = req.params; 
     const { result, status, feedback } = req.body;
 
     const updatedInterview = await Interview.findByIdAndUpdate(
       id,
-      { 
-        result,    // "passed", "failed", or "pending"
-        status,    // "completed", "cancelled", or "scheduled"
-        feedback   // String notes
-      },
+      { result, status, feedback },
       { new: true }
     ).populate("userId", "name email").populate("jobId", "title");
 

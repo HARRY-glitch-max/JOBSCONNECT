@@ -9,7 +9,9 @@ import {
   getEmployerJobs,
   getEmployerInterviews,
   getEmployerReports,
-  updateInterviewStatus, // ✅ Added new controller import
+  updateInterviewStatus,
+  getEmployerProfile,    // ✅ Added for the new profile logic
+  updateEmployerProfile, // ✅ Added for the new profile logic
 } from "../controllers/employerController.js";
 import { shortlistCandidate } from "../controllers/applicationController.js";
 import { protect } from "../middleware/authMiddleware.js";
@@ -23,28 +25,34 @@ router.post("/register", createEmployer);
 router.post("/login", loginEmployer);
 
 // ==========================================
-// 2. PROTECTED EMPLOYER ACTIONS
+// 2. PERSONAL PROFILE ROUTES (MUST BE ABOVE /:id)
+// ==========================================
+// These handle the logged-in employer's own data via token
+router.get("/profile/me", protect, getEmployerProfile);
+router.put("/profile/me", protect, updateEmployerProfile);
+
+// ==========================================
+// 3. PROTECTED EMPLOYER ACTIONS
 // ==========================================
 // Shortlist a candidate for a specific application
 router.put("/applications/:id/shortlist", protect, shortlistCandidate);
 
-// ✅ NEW: Update interview status/result (Pass/Fail)
-// Endpoint: PUT /api/employers/interviews/:id/status
+// Update interview status/result (Pass/Fail)
 router.put("/interviews/:id/status", protect, updateInterviewStatus);
 
 // ==========================================
-// 3. ANALYTICS & SPECIFIC COLLECTIONS
+// 4. ANALYTICS & SPECIFIC COLLECTIONS
 // ==========================================
 router.get("/reports", protect, getEmployerReports); 
 router.get("/jobs", protect, getEmployerJobs);
 router.get("/interviews", protect, getEmployerInterviews);
 
 // ==========================================
-// 4. GENERAL & DYNAMIC ID ROUTES
+// 5. GENERAL & DYNAMIC ID ROUTES
 // ==========================================
 router.get("/", protect, getEmployers);
 
-// Dynamic routes
+// Dynamic routes (Keep these at the bottom)
 router.get("/:id", protect, getEmployerById);
 router.put("/:id", protect, updateEmployer);
 router.delete("/:id", protect, deleteEmployer);

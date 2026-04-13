@@ -2,16 +2,16 @@ import { useContext, useEffect, useState, useCallback } from "react";
 import { useNavigate, Routes, Route, useLocation } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
 import { 
-  LayoutDashboard, FileText, Users, Calendar, 
-  ArrowRight, UserCircle, Send, LogOut, ShieldCheck,
+  FileText, Users, Calendar, ArrowRight, Send, LogOut, ShieldCheck,
   Activity, Settings, RefreshCcw
 } from "lucide-react";
 
 import Button from "../components/ui/Button";
 import PageTransition from "../components/PageTransition";
 import { AuthContext } from "../contexts/AuthContext";
-import apiClient from "../api/client"; // ✅ Use your updated apiClient
+import apiClient from "../api/client";
 import AdminReports from "./AdminReports";
+import AdminProfile from "./AdminProfile"; // ✅ Import your actual Profile component
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -27,9 +27,11 @@ export default function AdminDashboard() {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState(null);
 
-  const goTo = (path) => navigate(`/admin/dashboard/${path}`);
+  // Use useCallback to prevent the function from changing on every render
+  const goTo = useCallback((path) => {
+    navigate(`/admin/dashboard/${path}`);
+  }, [navigate]);
 
-  // ✅ Fetch live overview metrics
   const fetchStats = useCallback(async () => {
     try {
       setLoading(true);
@@ -48,9 +50,7 @@ export default function AdminDashboard() {
     if (user) fetchStats();
   }, [user, fetchStats]);
 
-  // ✅ Trigger the Sync Logic
   const handleSendReport = async () => {
-    // Determine the employer ID from the user context
     const employerId = user?.employerId?._id || user?.employerId;
     const companyName = user?.employerId?.companyName || "the Organization";
 
@@ -63,10 +63,9 @@ export default function AdminDashboard() {
     
     setGenerating(true);
     try {
-      // ✅ Hits the POST /api/reports/generate route
       await apiClient.post("/reports/generate", { employerId });
       alert(`Success! Real-time analytics have been pushed to ${companyName}.`);
-      fetchStats(); // Refresh stats after sync
+      fetchStats();
     } catch (err) {
       alert("Action Failed: " + (err.response?.data?.message || err.message));
     } finally {
@@ -78,7 +77,7 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-[#F8FAFC] py-12 px-6 font-sans text-slate-900 overflow-x-hidden">
       <div className="max-w-6xl mx-auto">
         
-        {/* --- DASHBOARD HEADER --- */}
+        {/* --- HEADER --- */}
         <header className="flex flex-col md:flex-row md:items-center justify-between mb-12 gap-6">
           <div className="space-y-1">
             <div className="flex items-center gap-2 mb-2">
@@ -106,10 +105,10 @@ export default function AdminDashboard() {
           </div>
         </header>
 
-        {/* --- TRANSITIONING CONTENT AREA --- */}
         <AnimatePresence mode="wait">
           <Routes location={location} key={location.pathname}>
             
+            {/* --- MAIN DASHBOARD VIEW --- */}
             <Route path="/" element={
               <PageTransition>
                 {error && (
@@ -119,14 +118,12 @@ export default function AdminDashboard() {
                   </div>
                 )}
 
-                {/* --- STATS GRID --- */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
                   <StatCard title="Live Job Postings" value={stats?.jobs?.total} loading={loading} icon={<FileText size={24} />} lightColor="bg-blue-50 text-blue-600" />
                   <StatCard title="Active Applicants" value={stats?.applications?.total} loading={loading} icon={<Users size={24} />} lightColor="bg-purple-50 text-purple-600" />
                   <StatCard title="Interviews Logged" value={stats?.interviews?.total} loading={loading} icon={<Calendar size={24} />} lightColor="bg-orange-50 text-orange-600" />
                 </div>
 
-                {/* --- ACTIONS GRID --- */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                   <ActionCard 
                     title="Send Report" 
@@ -157,6 +154,7 @@ export default function AdminDashboard() {
               </PageTransition>
             } />
 
+            {/* --- REPORTS VIEW --- */}
             <Route path="reports" element={
               <PageTransition>
                 <div className="bg-white p-10 rounded-[3rem] shadow-xl shadow-slate-200/50 border border-slate-100 min-h-[600px]">
@@ -168,25 +166,15 @@ export default function AdminDashboard() {
               </PageTransition>
             } />
 
+            {/* --- PROFILE VIEW (FIXED) --- */}
             <Route path="profile" element={
               <PageTransition>
                 <div className="bg-white p-10 rounded-[3rem] shadow-xl shadow-slate-200/50 border border-slate-100 min-h-[600px]">
                    <Button onClick={() => navigate("/admin/dashboard")} variant="outline" className="mb-10 px-8 py-3 rounded-xl border-slate-200 font-bold transition-all">
                      ← Return to Dashboard
                    </Button>
-                   <div className="max-w-2xl">
-                     <h3 className="text-3xl font-black text-slate-900">Administrative Profile</h3>
-                     <p className="text-slate-500 mt-2 text-lg font-medium leading-relaxed mb-8">
-                       Configure your administrative credentials, multi-factor authentication, and portal access logs.
-                     </p>
-                     <div className="p-12 bg-slate-50 rounded-[2.5rem] border border-dashed border-slate-300 flex flex-col items-center text-center">
-                        <div className="w-16 h-16 bg-white shadow-sm rounded-full flex items-center justify-center text-slate-400 mb-4 border border-slate-200">
-                          <ShieldCheck size={32} className="text-blue-600" />
-                        </div>
-                        <p className="font-black text-slate-400 uppercase tracking-widest text-[11px]">Identity Management System Locked</p>
-                        <p className="text-sm text-slate-500 mt-2">Only Root Administrators can modify these settings.</p>
-                     </div>
-                   </div>
+                   {/* ✅ Render the actual component instead of the locked div */}
+                   <AdminProfile />
                 </div>
               </PageTransition>
             } />
@@ -197,8 +185,7 @@ export default function AdminDashboard() {
   );
 }
 
-// --- SUB-COMPONENTS ---
-
+// --- SUB-COMPONENTS (Same as before) ---
 function StatCard({ title, value, loading, icon, lightColor }) {
   return (
     <div className="bg-white border border-slate-200/60 p-7 rounded-[2.5rem] shadow-sm flex items-center gap-6 transition-all hover:shadow-xl hover:-translate-y-1.5 duration-300 group">

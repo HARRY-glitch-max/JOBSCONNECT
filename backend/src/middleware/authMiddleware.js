@@ -21,7 +21,7 @@ export const protect = async (req, res, next) => {
       let account = null;
       let detectedRole = decoded.role?.toLowerCase();
 
-      // We use .lean() for performance since we don't need Mongoose save() methods here
+      // We use .lean() for performance
       if (detectedRole === "admin") {
         account = await Admin.findById(decoded.id).select("-password").lean();
       } else if (detectedRole === "employer") {
@@ -30,7 +30,7 @@ export const protect = async (req, res, next) => {
         account = await User.findById(decoded.id).select("-password").lean();
       }
 
-      // 3. Fallback: If role was missing in token or account not found in expected collection
+      // 3. Fallback: If role was missing or account not found in primary collection
       if (!account) {
         const [foundUser, foundEmployer, foundAdmin] = await Promise.all([
           User.findById(decoded.id).select("-password").lean(),
@@ -48,10 +48,11 @@ export const protect = async (req, res, next) => {
       }
 
       // 4. Attach standard user object to request
-      // We ensure _id is a string and the role is explicitly forced to the correct value
+      // ✅ FIX: Explicitly adding .id so controllers using req.user.id don't return 404
       req.user = {
         ...account,
         _id: account._id.toString(),
+        id: account._id.toString(), 
         role: account.role || detectedRole, 
       };
 
@@ -74,41 +75,19 @@ export const protect = async (req, res, next) => {
 // 🔒 Granular Role Protection Middlewares
 // ==========================================
 
-/**
- * Restricts access to Admin users only
- */
 export const adminProtect = (req, res, next) => {
-  if (req.user && req.user.role === "admin") {
-    return next();
-  }
+  if (req.user && req.user.role === "admin") return next();
   return res.status(403).json({ message: "Access denied: Admins only." });
 };
 
-/**
- * Restricts access to Employer users only
- */
 export const employerProtect = (req, res, next) => {
-  // Ensure role is normalized for comparison
   const role = req.user?.role?.toLowerCase();
-  
-  if (req.user && (role === "employer" || req.user.companyName)) {
-    return next();
-  }
-  
-  // Debugging log for development (remove in production if preferred)
-  console.warn(`403 Forbidden: User ${req.user?._id} attempted employer route with role: ${role}`);
-  
+  if (req.user && (role === "employer" || req.user.companyName)) return next();
   return res.status(403).json({ message: "Access denied: Employers only." });
 };
 
-/**
- * Restricts access to Jobseekers only
- */
 export const jobseekerProtect = (req, res, next) => {
   const role = req.user?.role?.toLowerCase();
-  
-  if (req.user && role === "jobseeker") {
-    return next();
-  }
+  if (req.user && role === "jobseeker") return next();
   return res.status(403).json({ message: "Access denied: Jobseekers only." });
 };

@@ -2,7 +2,7 @@ import Admin from "../models/Admin.js";
 import Job from "../models/Job.js";
 import Application from "../models/Application.js";
 import Interview from "../models/Interview.js";
-import Employer from "../models/Employer.js"; // ✅ Added Import
+import Employer from "../models/Employer.js";
 import generateToken from "../utils/generateToken.js";
 
 // ==========================================
@@ -85,6 +85,59 @@ export const loginAdmin = async (req, res) => {
 };
 
 // ==========================================
+// ✅ NEW: Get Admin Profile (Fixes SyntaxError)
+// ==========================================
+export const getAdminProfile = async (req, res) => {
+  try {
+    // req.user._id is attached by your auth middleware
+    const admin = await Admin.findById(req.user._id).populate("employerId");
+
+    if (!admin) {
+      return res.status(404).json({ message: "Admin profile not found." });
+    }
+
+    res.json(admin);
+  } catch (error) {
+    console.error("GET PROFILE ERROR:", error);
+    res.status(500).json({ message: "Server error fetching admin profile." });
+  }
+};
+
+// ==========================================
+// ✅ NEW: Update Admin Profile
+// ==========================================
+export const updateAdminProfile = async (req, res) => {
+  try {
+    const admin = await Admin.findById(req.user._id);
+
+    if (!admin) {
+      return res.status(404).json({ message: "Admin not found." });
+    }
+
+    admin.name = req.body.name || admin.name;
+    admin.email = (req.body.email || admin.email).toLowerCase();
+
+    // Only update password if provided in request
+    if (req.body.password) {
+      admin.password = req.body.password;
+    }
+
+    const updatedAdmin = await admin.save();
+
+    res.json({
+      _id: updatedAdmin._id,
+      name: updatedAdmin.name,
+      email: updatedAdmin.email,
+      role: updatedAdmin.role,
+      employerId: updatedAdmin.employerId,
+    });
+  } catch (error) {
+    console.error("UPDATE PROFILE ERROR:", error);
+    res.status(500).json({ message: "Server error updating profile." });
+  }
+};
+
+// ==========================================
 // Generate employer-scoped reports (Live Stats)
 // ==========================================
 export const getAdminReports = async (req, res) => {
@@ -137,18 +190,17 @@ export const getAdminReports = async (req, res) => {
 };
 
 // ==========================================
-// ✅ UPDATED: Trigger New Report Generation & Notify Employer
+// Trigger New Report Generation & Notify Employer
 // ==========================================
 export const generateNewReport = async (req, res) => {
   try {
     const employerId = req.user.employerId;
-    const adminName = req.user.name; // Extracting name from token via middleware
+    const adminName = req.user.name;
 
     if (!employerId) {
       return res.status(400).json({ message: "Employer ID missing." });
     }
 
-    // ✅ Update the Employer document with a notification
     const updatedEmployer = await Employer.findByIdAndUpdate(
       employerId,
       {
@@ -169,7 +221,7 @@ export const generateNewReport = async (req, res) => {
     }
 
     res.status(201).json({ 
-      message: "Report generated successfully. AGORO SARE has been notified.",
+      message: `Report generated successfully. ${updatedEmployer.companyName} has been notified.`,
       generatedAt: new Date()
     });
   } catch (error) {

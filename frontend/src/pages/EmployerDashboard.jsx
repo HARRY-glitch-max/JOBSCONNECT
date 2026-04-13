@@ -5,7 +5,7 @@ import {
   MessageSquare, PlusCircle, Briefcase, Users,
   Calendar, UserCircle, LogOut, Bell,
   TrendingUp, Sparkles, Search, Target,
-  Zap, Globe, ChevronRight, BarChart3
+  Zap, Globe, ChevronRight, BarChart3, Settings, ShieldCheck
 } from "lucide-react";
 
 import ChatPage from "./ChatPage"; 
@@ -15,6 +15,7 @@ import Jobs from "./Jobs";
 import EmployerApplications from "./EmployerApplications";
 import EmployerReports from "./EmployerReports";
 import EmployerNotifications from "./EmployerNotifications";
+import EmployerProfile from "./EmployerProfile"; // ✅ UNCOMMENTED AND ACTIVE
 import PageTransition from "../components/PageTransition";
 import { AuthContext } from "../contexts/AuthContext";
 import apiClient from "../api/client";
@@ -30,7 +31,6 @@ export default function EmployerDashboard() {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
 
-  // --- 1. DATA FETCHING ---
   const fetchNotifications = useCallback(async () => {
     const uid = user?._id || user?.id;
     if (!uid) return;
@@ -46,21 +46,16 @@ export default function EmployerDashboard() {
     fetchNotifications();
   }, [fetchNotifications]);
 
-  // --- 2. REAL-TIME SOCKET EVENTS ---
   useEffect(() => {
     const uid = user?._id || user?.id;
     if (!socket || !uid) return;
-    
     socket.emit("join", uid);
-
     socket.on("new_notification", (newNotif) => {
       setNotifications((prev) => [newNotif, ...prev]);
     });
-
     socket.on("new_conversation_notification", () => {
       setTimeout(fetchNotifications, 500);
     });
-
     return () => {
       socket.off("new_notification");
       socket.off("new_conversation_notification");
@@ -71,10 +66,8 @@ export default function EmployerDashboard() {
     setUnreadCount(notifications.filter((n) => !n.isRead).length);
   }, [notifications]);
 
-  // --- 3. DYNAMIC HEADER LOGIC ---
   const getHeaderTitle = () => {
     if (location.state?.receiverName) return `Chat: ${location.state.receiverName}`;
-    
     const path = location.pathname;
     if (path.includes("/messages")) return "Message Center";
     if (path.includes("/interviews")) return "Interview Schedule";
@@ -83,11 +76,10 @@ export default function EmployerDashboard() {
     if (path.includes("/applications")) return "Applicant Tracking";
     if (path.includes("/reports")) return "Performance Analytics";
     if (path.includes("/notifications")) return "Alerts & Updates";
-    
+    if (path.includes("/profile")) return "Organization Profile"; // ✅ FIXED
     return "Dashboard Overview";
   };
 
-  // --- 4. NAVIGATION CONFIG ---
   const navItems = [
     { to: "reports", label: "Analytics", icon: <BarChart3 size={20} /> },
     { to: "notifications", label: "Alerts", icon: <Bell size={20} />, badge: unreadCount },
@@ -105,7 +97,9 @@ export default function EmployerDashboard() {
       
       {/* SIDEBAR */}
       <aside className="w-80 bg-[#0A0F1D] flex flex-col z-30 relative shadow-[20px_0_60px_-15px_rgba(0,0,0,0.3)]">
-        <div className="p-10">
+        
+        {/* LOGO AREA */}
+        <div className="p-8 pb-4">
           <div className="flex items-center gap-3 cursor-pointer group" onClick={() => navigate("/employer/dashboard")}>
             <div className="bg-blue-600 w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-xl shadow-blue-600/40 rotate-3 group-hover:rotate-12 transition-all">
               <Zap size={20} fill="currentColor" />
@@ -116,8 +110,49 @@ export default function EmployerDashboard() {
           </div>
         </div>
 
+        {/* PROFILE SECTION */}
+        <div className="px-6 py-6">
+          <div className="p-5 rounded-[2rem] bg-gradient-to-br from-slate-800/80 to-slate-900/90 border border-white/10 shadow-xl relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/10 blur-2xl rounded-full -mr-10 -mt-10"></div>
+            
+            <div className="flex items-center gap-4 relative z-10">
+              <div className="relative">
+                 <div className="w-14 h-14 rounded-2xl bg-blue-600 flex items-center justify-center text-white font-black text-2xl border-2 border-slate-700 shadow-2xl">
+                  {user?.companyName?.charAt(0) || "C"}
+                </div>
+                <span className="absolute -bottom-1 -right-1 w-5 h-5 bg-emerald-500 border-4 border-[#0A0F1D] rounded-full"></span>
+              </div>
+              <div className="truncate">
+                <p className="text-white font-black text-sm truncate leading-tight">{user?.companyName || "Organization"}</p>
+                <div className="flex items-center gap-1 text-blue-400">
+                  <ShieldCheck size={12} />
+                  <p className="text-[10px] font-bold uppercase tracking-widest">Verified</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 mt-5 relative z-10">
+              <button 
+                onClick={() => goTo("profile")} 
+                className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-tight transition-all ${
+                  location.pathname.includes("/profile") ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20" : "bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
+                }`}
+              >
+                <Settings size={14} /> Profile
+              </button>
+              <button 
+                onClick={logout} 
+                className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white text-[10px] font-black uppercase tracking-tight transition-all"
+              >
+                <LogOut size={14} /> Exit
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* NAVIGATION */}
         <nav className="flex-1 px-6 space-y-1 overflow-y-auto custom-scrollbar">
-          <p className="px-4 text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 mb-6">Main Menu</p>
+          <p className="px-4 text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 mb-6">Operations</p>
           {navItems.map((item) => (
             <NavLink
               key={item.to}
@@ -143,21 +178,11 @@ export default function EmployerDashboard() {
           ))}
         </nav>
 
-        {/* PROFILE CARD */}
-        <div className="m-6 p-6 rounded-[2rem] bg-gradient-to-b from-slate-800/40 to-slate-900/60 border border-white/5 shadow-2xl">
-          <div className="flex items-center gap-4 mb-6">
-            <div className="w-12 h-12 rounded-2xl bg-blue-600 flex items-center justify-center text-white font-black text-xl border-4 border-slate-800 shadow-xl">
-              {user?.companyName?.charAt(0) || "C"}
-            </div>
-            <div className="truncate">
-              <p className="text-white font-bold text-sm truncate">{user?.companyName || "Organization"}</p>
-              <p className="text-blue-400 text-[10px] font-black uppercase tracking-widest">Employer Hub</p>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <button onClick={() => goTo("profile")} className="py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 transition-all flex justify-center" title="Settings"><UserCircle size={18} /></button>
-            <button onClick={logout} className="py-3 rounded-xl bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white transition-all flex justify-center" title="Logout"><LogOut size={18} /></button>
-          </div>
+        <div className="p-8">
+           <div className="flex items-center gap-2 text-slate-600">
+              <Globe size={14} />
+              <span className="text-[10px] font-black uppercase tracking-tighter">Global Recruiting v2.4</span>
+           </div>
         </div>
       </aside>
 
@@ -180,16 +205,9 @@ export default function EmployerDashboard() {
                 className="pl-12 pr-6 py-3 bg-slate-100 border-none rounded-2xl text-xs font-bold focus:ring-4 focus:ring-blue-500/5 w-64 transition-all" 
               />
             </div>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 border border-slate-200">
-                <Globe size={18} />
-              </div>
-              <div className="hidden sm:block">
-                <p className="text-[10px] font-black text-slate-400 uppercase leading-none mb-1">Status</p>
-                <p className="text-xs font-bold text-emerald-500 flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span> Cloud Active
-                </p>
-              </div>
+            <div className="flex items-center gap-3 bg-slate-50 px-4 py-2 rounded-2xl border border-slate-100">
+                <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+                <p className="text-[10px] font-black text-slate-900 uppercase tracking-widest">System Online</p>
             </div>
           </div>
         </header>
@@ -205,6 +223,10 @@ export default function EmployerDashboard() {
               <Route path="interviews" element={<PageTransition><Interviews /></PageTransition>} />
               <Route path="post-job" element={<PageTransition><PostJob /></PageTransition>} />
               <Route path="my-jobs" element={<PageTransition><Jobs /></PageTransition>} />
+              
+              {/* ✅ COMPONENT NOW ACTIVATED */}
+              <Route path="profile" element={<PageTransition><EmployerProfile /></PageTransition>} />
+
               <Route index element={<PageTransition><DefaultOverview user={user} goTo={goTo} /></PageTransition>} />
             </Routes>
           </AnimatePresence>
