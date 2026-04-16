@@ -1,4 +1,4 @@
-import { createContext, useState, useEffect } from "react";
+import { createContext, useState, useEffect, useMemo } from "react";
 import apiClient from "../api/client";
 
 export const AuthContext = createContext();
@@ -7,12 +7,24 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Helper to normalize user data (ID standardization)
+  const normalizeUser = (data, role) => {
+    return {
+      ...data,
+      // Ensures components can always rely on ._id
+      _id: data._id || data.id || (typeof data.employerId === 'string' ? data.employerId : data.employerId?._id),
+      role: data.role || role,
+      // Maintains the populated object or ID string for employer context
+      employerId: data.employerId || null,
+    };
+  };
+
   useEffect(() => {
-    // Standardizing the key to 'jobConnectUser' as per your setup
     const savedUser = localStorage.getItem("jobConnectUser");
     if (savedUser) {
       try {
-        setUser(JSON.parse(savedUser));
+        const parsedUser = JSON.parse(savedUser);
+        setUser(normalizeUser(parsedUser, parsedUser.role));
       } catch (error) {
         localStorage.removeItem("jobConnectUser");
       }
@@ -23,28 +35,17 @@ export const AuthProvider = ({ children }) => {
   // ✅ Login
   const login = async (email, password, role = "jobseeker") => {
     let endpoint;
-    if (role === "admin") {
-      endpoint = "/admin/login";
-    } else if (role === "employer") {
-      endpoint = "/employers/login";
-    } else {
-      endpoint = "/jobseekers/login";
-    }
+    if (role === "admin") endpoint = "/admin/login";
+    else if (role === "employer") endpoint = "/employers/login";
+    else endpoint = "/jobseekers/login";
 
     try {
       const { data } = await apiClient.post(endpoint, { email, password, role });
-
-      // ✅ FIXED: We prioritize the populated employerId object from the backend
-      const userWithRole = {
-        ...data,
-        role: data.role || role,
-        // If it's an admin, data.employerId is now the populated object
-        employerId: data.employerId || null, 
-      };
+      const userWithRole = normalizeUser(data, role);
 
       setUser(userWithRole);
       localStorage.setItem("jobConnectUser", JSON.stringify(userWithRole));
-      return userWithRole; 
+      return userWithRole;
     } catch (err) {
       console.error("Login failed:", err.response?.data || err.message);
       throw err;
@@ -54,22 +55,13 @@ export const AuthProvider = ({ children }) => {
   // ✅ Register
   const register = async (formData, role = "jobseeker") => {
     let endpoint;
-    if (role === "admin") {
-      endpoint = "/admin/register";
-    } else if (role === "employer") {
-      endpoint = "/employers/register";
-    } else {
-      endpoint = "/jobseekers/register";
-    }
+    if (role === "admin") endpoint = "/admin/register";
+    else if (role === "employer") endpoint = "/employers/register";
+    else endpoint = "/jobseekers/register";
 
     try {
       const { data } = await apiClient.post(endpoint, { ...formData, role });
-
-      const userWithRole = {
-        ...data,
-        role: data.role || role,
-        employerId: data.employerId || null,
-      };
+      const userWithRole = normalizeUser(data, role);
 
       setUser(userWithRole);
       localStorage.setItem("jobConnectUser", JSON.stringify(userWithRole));
@@ -82,11 +74,7 @@ export const AuthProvider = ({ children }) => {
 
   // ✅ Manual Setter
   const setAuthUser = (userData) => {
-    const userWithRole = {
-      ...userData,
-      role: userData.role || "jobseeker",
-      employerId: userData.employerId || null,
-    };
+    const userWithRole = normalizeUser(userData, userData.role);
     setUser(userWithRole);
     localStorage.setItem("jobConnectUser", JSON.stringify(userWithRole));
   };
@@ -95,31 +83,30 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     setUser(null);
     localStorage.removeItem("jobConnectUser");
-    // Navigation is handled by the component calling logout
   };
 
-  const role = user?.role;
-  const isCompanyAdmin = role === "admin";
-  const isEmployer = role === "employer";
-  const isJobseeker = role === "jobseeker";
+  // Derived values for cleaner component logic
+  const authValues = useMemo(() => {
+    const role = user?.role;
+    return {
+      user,
+      login,
+      register,
+      logout,
+      setAuthUser,
+      loading,
+      role,
+      isCompanyAdmin: role === "admin",
+      isEmployer: role === "employer",
+      isJobseeker: role === "jobseeker",
+      // Standardized accessors
+      userId: user?._id,
+      employerId: user?.employerId,
+    };
+  }, [user, loading]);
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        login,
-        register,
-        logout,
-        setAuthUser,
-        loading,
-        role,
-        isCompanyAdmin,
-        isEmployer,
-        isJobseeker,
-        // ✅ This will now return the object or the string ID correctly
-        employerId: user?.employerId, 
-      }}
-    >
+    <AuthContext.Provider value={authValues}>
       {!loading && children}
     </AuthContext.Provider>
   );

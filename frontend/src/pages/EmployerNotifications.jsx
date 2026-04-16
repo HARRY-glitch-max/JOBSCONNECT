@@ -13,32 +13,40 @@ export default function EmployerNotifications() {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // ✅ Optimized fetch with useCallback to prevent unnecessary re-renders
+  // ✅ Optimized fetch with internal debugging
   const fetchNotifications = useCallback(async () => {
-    if (!user?._id) return;
+    // If user isn't loaded yet, stay in loading state but don't fetch
+    if (!user?._id) {
+      console.log("Waiting for user data...");
+      return;
+    }
     
     try {
       setLoading(true);
-      // Matches your backend route: router.get("/user/:userId", protect, getUserNotifications)
+      console.log(`Fetching alerts for Employer: ${user._id}`);
+      
       const res = await apiClient.get(`/notifications/user/${user._id}`);
       
-      // Ensure we always set an array to avoid mapping errors
+      console.log("Server Response:", res.data);
       setNotifications(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
-      console.error("Error fetching notifications:", err);
-      setNotifications([]); // Reset to empty array on error
+      console.error("Fetch Error:", err.response?.data || err.message);
+      setNotifications([]); 
     } finally {
       setLoading(false);
     }
   }, [user?._id]);
 
   useEffect(() => {
-    fetchNotifications();
-  }, [fetchNotifications]);
+    // This ensures that as soon as 'user' exists, we fire the request
+    if (user?._id) {
+      fetchNotifications();
+    }
+  }, [user?._id, fetchNotifications]);
 
   const handleMarkAllRead = async () => {
+    if (!user?._id) return;
     try {
-      // Matches: router.put("/user/:userId/read-all", protect, markAllAsRead)
       await apiClient.put(`/notifications/user/${user._id}/read-all`);
       setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
     } catch (err) {
@@ -48,7 +56,6 @@ export default function EmployerNotifications() {
 
   const handleDelete = async (id) => {
     try {
-      // Matches: router.delete("/:id", protect, deleteNotification)
       await apiClient.delete(`/notifications/${id}`);
       setNotifications(prev => prev.filter(n => n._id !== id));
     } catch (err) {
@@ -57,22 +64,30 @@ export default function EmployerNotifications() {
   };
 
   const getIcon = (type) => {
+    const iconClass = "shrink-0";
     switch (type) {
-      case 'job_posting': return <PlusCircle size={20} className="text-emerald-500" />;
-      case 'interview': return <Calendar size={20} className="text-violet-500" />;
-      case 'application_status': return <Users size={20} className="text-blue-500" />;
-      case 'report': return <FileText size={20} className="text-orange-500" />;
-      case 'message': return <MessageSquare size={20} className="text-sky-500" />;
-      default: return <Bell size={20} className="text-slate-400" />;
+      case 'job_posting': return <PlusCircle size={20} className={`${iconClass} text-emerald-500`} />;
+      case 'interview': return <Calendar size={20} className={`${iconClass} text-violet-500`} />;
+      case 'application_status': return <Users size={20} className={`${iconClass} text-blue-500`} />;
+      case 'report': return <FileText size={20} className={`${iconClass} text-orange-500`} />;
+      case 'message': return <MessageSquare size={20} className={`${iconClass} text-sky-500`} />;
+      default: return <Bell size={20} className={`${iconClass} text-slate-400`} />;
     }
   };
 
-  // ✅ Consistent Loading UI
+  // ✅ Ensure we don't show the spinner forever if user data never arrives
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (!user) setLoading(false);
+    }, 5000); // Fail gracefully after 5 seconds
+    return () => clearTimeout(timeout);
+  }, [user]);
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] w-full">
         <div className="w-12 h-12 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin mb-4"></div>
-        <p className="text-slate-400 font-bold animate-pulse">Loading your updates...</p>
+        <p className="text-slate-400 font-bold animate-pulse">Checking for updates...</p>
       </div>
     );
   }
@@ -82,7 +97,7 @@ export default function EmployerNotifications() {
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-10 gap-4">
         <div>
           <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Notification Center</h2>
-          <p className="text-slate-500 font-medium mt-1">Manage alerts for jobs, interviews, and admin reports.</p>
+          <p className="text-slate-500 font-medium mt-1">Manage alerts for HireFlow updates and applications.</p>
         </div>
         {notifications.length > 0 && (
           <button 
@@ -107,7 +122,7 @@ export default function EmployerNotifications() {
               }`}
             >
               <div className={`shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110 ${
-                notif.isRead ? "bg-slate-50 text-slate-400" : "bg-blue-600 text-white shadow-lg shadow-blue-200"
+                notif.isRead ? "bg-slate-50" : "bg-blue-600 text-white shadow-lg shadow-blue-200"
               }`}>
                 {getIcon(notif.type)}
               </div>
@@ -152,7 +167,7 @@ export default function EmployerNotifications() {
               <Bell size={48} />
             </div>
             <h3 className="text-xl font-bold text-slate-900">Your tray is empty</h3>
-            <p className="text-slate-500 font-medium">We'll notify you when candidates apply or reports are ready.</p>
+            <p className="text-slate-500 font-medium">No notifications yet. We'll alert you here.</p>
           </div>
         )}
       </div>

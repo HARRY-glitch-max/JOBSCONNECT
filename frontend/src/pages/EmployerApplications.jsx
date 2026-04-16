@@ -3,8 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { AuthContext } from "../contexts/AuthContext";
 import { 
   FileText, MessageSquare, User, Briefcase, Loader2,
-  AlertCircle, CheckCircle2, XCircle, X, ExternalLink, Calendar, Tag,
-  Trophy, RefreshCw
+  AlertCircle, CheckCircle2, XCircle, X, ExternalLink, Calendar,
+  Trophy, RefreshCw, Code
 } from "lucide-react";
 import { getEmployerApplications, updateApplicationStatus } from "../api/applications";
 import StatusBadge from "../components/applications/StatusBadge";
@@ -94,6 +94,24 @@ const EmployerApplications = () => {
     });
   };
 
+  // Improved helper for Bio and Skills rendering
+  const renderSkills = (skillsData) => {
+    let skillsArray = [];
+    if (Array.isArray(skillsData)) {
+      skillsArray = skillsData;
+    } else if (typeof skillsData === "string") {
+      skillsArray = skillsData.split(",").map(s => s.trim()).filter(s => s !== "");
+    }
+
+    if (skillsArray.length === 0) return <span className="text-slate-400 text-xs italic">No specific skills highlighted.</span>;
+
+    return skillsArray.map((skill, i) => (
+      <span key={i} className="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-xl text-[10px] font-black uppercase tracking-wider">
+        {skill}
+      </span>
+    ));
+  };
+
   if (loading) return (
     <div className="flex flex-col items-center justify-center min-h-[60vh]">
       <Loader2 className="animate-spin text-blue-600 mb-4" size={32} />
@@ -163,7 +181,13 @@ const EmployerApplications = () => {
                     <td className="px-8 py-6">
                       <div 
                         className="flex flex-col gap-1 cursor-pointer group/name" 
-                        onClick={() => setSelectedCandidate({ ...app.userId, appBio: app.bio, appSkills: app.skills, fullAppData: app })}
+                        onClick={() => setSelectedCandidate({ 
+                          ...app.userId, 
+                          // Combined fallback logic for Bio and Skills
+                          displayBio: app.bio || app.userId?.bio || app.userId?.summary,
+                          displaySkills: app.skills || app.userId?.skills || app.userId?.techStack,
+                          fullAppData: app 
+                        })}
                       >
                         <span className="font-black text-slate-900 text-sm group-hover/name:text-blue-600 flex items-center gap-1.5 transition-colors">
                           {app.userId?.name || "Anonymous User"} 
@@ -185,10 +209,8 @@ const EmployerApplications = () => {
                       <StatusBadge status={app.status} />
                     </td>
 
-                    <td className="px-8 py-6">
+                    <td className="px-8 py-6 text-center">
                       <div className="flex items-center justify-center gap-2">
-                        
-                        {/* 1. SUBMITTED: Allow Shortlist or Immediate Reject */}
                         {(app.status === "submitted" || app.status === "scheduled") && (
                           <>
                             <button onClick={() => handleReview(app._id, "shortlisted")} className="p-2 text-emerald-500 hover:bg-emerald-50 rounded-xl transition-all" title="Shortlist">
@@ -199,15 +221,11 @@ const EmployerApplications = () => {
                             </button>
                           </>
                         )}
-
-                        {/* 2. SHORTLISTED: Allow Interview invitation */}
                         {app.status === "shortlisted" && (
                           <button onClick={() => handleStartInterview(app)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="Call for Interview">
                             <Calendar size={20} />
                           </button>
                         )}
-
-                        {/* 3. INTERVIEW: Final decision (Hire/Unsuccessful) */}
                         {app.status === "interview" && (
                           <>
                             <button onClick={() => handleReview(app._id, "hired")} className="p-2 text-white bg-emerald-500 hover:bg-emerald-600 rounded-xl shadow-md transition-all" title="Finalize Hire">
@@ -218,8 +236,6 @@ const EmployerApplications = () => {
                             </button>
                           </>
                         )}
-
-                        {/* Divider & Message Button */}
                         <div className="w-[1px] h-4 bg-slate-100 mx-1"></div>
                         <button 
                           onClick={() => handleMessage(app)} 
@@ -247,49 +263,61 @@ const EmployerApplications = () => {
 
       {/* QUICK VIEW MODAL */}
       {selectedCandidate && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-6">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-6">
           <div className="bg-white w-full max-w-xl rounded-[3rem] p-10 shadow-2xl animate-in fade-in zoom-in duration-300 max-h-[90vh] overflow-y-auto custom-scrollbar">
             <div className="flex justify-between items-start mb-8">
-              <div>
-                <h2 className="text-3xl font-black text-slate-900 tracking-tight">{selectedCandidate.name}</h2>
-                <span className="text-slate-400 font-bold text-xs uppercase tracking-widest">{selectedCandidate.email}</span>
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center text-white text-2xl font-black">
+                  {selectedCandidate.name?.charAt(0)}
+                </div>
+                <div>
+                  <h2 className="text-3xl font-black text-slate-900 tracking-tight">{selectedCandidate.name}</h2>
+                  <span className="text-blue-600 font-bold text-[10px] uppercase tracking-widest">Verified Candidate</span>
+                </div>
               </div>
-              <button onClick={() => setSelectedCandidate(null)} className="p-3 bg-slate-50 hover:bg-rose-50 rounded-2xl transition-all">
+              <button onClick={() => setSelectedCandidate(null)} className="p-3 bg-slate-50 hover:bg-rose-50 hover:text-rose-600 rounded-2xl transition-all">
                 <X size={20} />
               </button>
             </div>
 
             <div className="space-y-8">
+              {/* SKILLS SECTION */}
               <div>
-                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
-                  <Tag size={14} className="text-blue-500" /> Professional Competencies
+                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                  <Code size={14} className="text-emerald-500" /> Endorsed Competencies
                 </h4>
                 <div className="flex flex-wrap gap-2">
-                  {selectedCandidate.appSkills?.length > 0 ? (
-                    selectedCandidate.appSkills.map((skill, i) => (
-                      <span key={i} className="px-3 py-1 bg-blue-50 text-blue-600 rounded-xl text-[11px] font-black uppercase tracking-wider">
-                        {skill}
-                      </span>
-                    ))
-                  ) : (
-                    <span className="text-slate-400 text-xs italic">Technical assessment pending.</span>
-                  )}
+                  {renderSkills(selectedCandidate.displaySkills)}
                 </div>
               </div>
 
+              {/* BIO SECTION */}
               <div>
-                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
-                  <MessageSquare size={14} className="text-blue-500" /> Candidate Statement
+                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                  <FileText size={14} className="text-blue-500" /> Professional Statement
                 </h4>
                 <div className="text-slate-600 text-[15px] bg-slate-50 p-6 rounded-[2rem] italic border-l-4 border-blue-600 leading-relaxed shadow-inner">
-                  {selectedCandidate.appBio || selectedCandidate.bio || 'No personal statement provided.'}
+                  "{selectedCandidate.displayBio || 'The candidate has not provided a personal statement yet.'}"
+                </div>
+              </div>
+
+              {/* CONTACT & WORKFLOW INFO */}
+              <div className="bg-slate-900 rounded-[2rem] p-6 text-white flex items-center justify-between">
+                <div>
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Contact Email</p>
+                  <p className="font-bold text-sm">{selectedCandidate.email}</p>
+                </div>
+                <div className="h-8 w-[1px] bg-slate-700"></div>
+                <div>
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Current Status</p>
+                  <p className="font-bold text-sm text-blue-400 capitalize">{selectedCandidate.fullAppData?.status}</p>
                 </div>
               </div>
             </div>
 
             <div className="mt-10 flex gap-4">
               <button onClick={() => setSelectedCandidate(null)} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black uppercase text-xs hover:bg-slate-200 transition-all">
-                Close
+                Dismiss
               </button>
               <button 
                 onClick={() => {
@@ -298,7 +326,7 @@ const EmployerApplications = () => {
                 }}
                 className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-black uppercase text-xs shadow-lg shadow-blue-200 flex items-center justify-center gap-2 hover:bg-blue-700 transition-all"
               >
-                <MessageSquare size={16} /> Open Channel
+                <MessageSquare size={16} /> Contact Candidate
               </button>
             </div>
           </div>
