@@ -1,7 +1,7 @@
 // src/pages/EmployerRegister.jsx
 import { useState, useContext } from "react";
 import { useNavigate } from "react-router-dom";
-import Input from "../components/ui/Input";
+import Input from "../components/ui/input";
 import Button from "../components/ui/button";
 import { registerEmployer } from "../services/api"; 
 import { AuthContext } from "../contexts/AuthContext";

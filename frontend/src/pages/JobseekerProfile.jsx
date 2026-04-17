@@ -1,7 +1,7 @@
 // src/pages/JobseekerProfile.jsx
 import { useEffect, useState, useContext } from "react";
 import { useNavigate } from "react-router-dom";
-import Input from "../components/ui/Input";
+import Input from "../components/ui/input";
 import Button from "../components/ui/button";
 import { getJobseekerProfile, updateJobseekerProfile } from "../services/api"; // ✅ API layer
 import { AuthContext } from "../contexts/AuthContext";
