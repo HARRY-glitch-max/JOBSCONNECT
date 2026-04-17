@@ -4,7 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
 import { useTheme } from "../../contexts/ThemeContext";
 import { Briefcase, Home, LogIn, UserPlus, LogOut, Sun, Moon, RefreshCcw } from "lucide-react";
-import Button from "../ui/Button";
+import Button from "../ui/button";
 
 const Navbar = () => {
   const { user, logout } = useAuth();

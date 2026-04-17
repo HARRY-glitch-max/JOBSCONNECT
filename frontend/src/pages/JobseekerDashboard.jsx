@@ -11,7 +11,7 @@ import JobseekerNotifications from "./JobseekerNotifications";
 import JobseekerInterviews from "./JobseekerInterviews";
 
 import { AuthContext } from "../contexts/AuthContext";
-import Button from "../components/ui/Button";
+import Button from "../components/ui/button";
 import { 
   Search, 
   FileText, 

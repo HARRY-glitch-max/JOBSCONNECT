@@ -12,7 +12,7 @@ import {
   MessageSquare,
   Bell, // ✅ Added for Notifications
 } from "lucide-react";
-import Button from "../ui/Button";
+import Button from "../ui/button";
 
 const Sidebar = () => {
   const { user, logout } = useAuth();

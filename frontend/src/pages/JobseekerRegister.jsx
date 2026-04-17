@@ -2,7 +2,7 @@
 import { useState, useContext } from "react";
 import { useNavigate } from "react-router-dom";
 import Input from "../components/ui/Input";
-import Button from "../components/ui/Button";
+import Button from "../components/ui/button";
 import { registerJobseeker } from "../services/api"; 
 import { AuthContext } from "../contexts/AuthContext";
 

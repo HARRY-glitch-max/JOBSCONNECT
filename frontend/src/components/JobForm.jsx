@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import Input from "./ui/Input";
 import Textarea from "./ui/Textarea";
-import Button from "./ui/Button";
+import Button from "./ui/button";
 import Card from "./ui/Card";
 
 const JobForm = ({ onSubmit }) => {

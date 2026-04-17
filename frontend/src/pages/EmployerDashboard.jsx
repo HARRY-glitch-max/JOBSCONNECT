@@ -20,7 +20,7 @@ import PageTransition from "../components/PageTransition";
 import { AuthContext } from "../contexts/AuthContext";
 import apiClient from "../api/client";
 import { useSocket } from "../hooks/useSocket";
-import Button from "../components/ui/Button";
+import Button from "../components/ui/button";
 
 export default function EmployerDashboard() {
   const navigate = useNavigate();

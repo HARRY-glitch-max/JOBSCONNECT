@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Input from "../components/ui/Input";
-import Button from "../components/ui/Button";
+import Button from "../components/ui/button";
 import { getAdminProfile, updateAdminProfile } from "../services/api"; // ✅ API layer
 import { AuthContext } from "../contexts/AuthContext";
 import { useContext } from "react";

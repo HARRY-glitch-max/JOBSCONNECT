@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { Building2, Mail, Phone, MapPin, Briefcase, Save, ShieldCheck, Loader2 } from "lucide-react";
 import { getEmployerProfile, updateEmployerProfile } from "../services/api"; 
 import { AuthContext } from "../contexts/AuthContext";
-import Button from "../components/ui/Button";
+import Button from "../components/ui/button";
 
 export default function EmployerProfile() {
   const { login: setAuth } = useContext(AuthContext);
