@@ -1,7 +1,7 @@
 // src/pages/EmployerLogin.jsx
 import { useState, useContext } from "react";
 import { useNavigate } from "react-router-dom";
-import Input from "../components/ui/Input";
+import Input from "../components/ui/input";
 import Button from "../components/ui/button";
 import { loginEmployer } from "../services/api"; // employer-specific login
 import { AuthContext } from "../contexts/AuthContext";
