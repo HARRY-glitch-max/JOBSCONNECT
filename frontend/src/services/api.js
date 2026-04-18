@@ -5,7 +5,9 @@ import axios from "axios";
 // Axios Instance
 // =====================================
 const API = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api",
+  baseURL: import.meta.env.PROD
+    ? "https://jobsconnect-2.onrender.com/api" // ✅ Production (Render)
+    : "http://localhost:5000/api",             // ✅ Local development
   withCredentials: true,
 });
 
@@ -155,18 +157,14 @@ export const getEmployerApplications = (employerId) =>
   API.get(`/applications/employer/${employerId}`);
 
 // =====================================
-// ✅ CHAT ENDPOINTS (MATCH BACKEND ROUTES)
+// CHAT ENDPOINTS
 // =====================================
-
-// 🔹 Get Inbox (All conversations for user)
 export const getInbox = (userId) =>
   API.get(`/chats/user/${userId}`);
 
-// 🔹 Get Chat History Between Two Users
 export const getChatHistory = (senderId, receiverId) =>
   API.get(`/chats/history/${senderId}/${receiverId}`);
 
-// 🔹 Send Message
 export const sendChatMessage = (data) =>
   API.post("/chats", data);
 

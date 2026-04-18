@@ -10,12 +10,12 @@ import mongoose from "mongoose";
 import http from "http";
 import { Server } from "socket.io";
 
-// --- 1. MODEL REGISTRATION ---
-import "./models/Jobseeker.js"; 
+// --- MODEL REGISTRATION ---
+import "./models/Jobseeker.js";
 import "./models/Employer.js";
 import "./models/Job.js";
 import "./models/Interview.js";
-import Chat from "./models/Chat.js"; 
+import Chat from "./models/Chat.js";
 
 dotenv.config();
 
@@ -23,24 +23,44 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
 
+/* =============================
+   SECURITY & MIDDLEWARE
+============================= */
+
 app.use(helmet({ crossOriginResourcePolicy: false }));
+
 if (process.env.NODE_ENV === "development") {
   app.use(morgan("dev"));
 }
 
+/* =============================
+   ✅ PRODUCTION-SAFE CORS
+============================= */
+
 const allowedOrigins = [
   "http://localhost:5173",
   "http://127.0.0.1:5173",
-  process.env.ALLOWED_ORIGIN,
-].filter(Boolean);
+  "https://jobsconnect-lov5.vercel.app",
+];
 
 app.use(
   cors({
-    origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-      return callback(new Error(`CORS policy blocked origin: ${origin}`), false);
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true);
+
+      // Allow localhost
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      // Allow ALL vercel preview deployments
+      if (origin.includes("vercel.app")) {
+        return callback(null, true);
+      }
+
+      console.error("❌ CORS blocked:", origin);
+      return callback(new Error("Not allowed by CORS"));
     },
-    // ✅ Added "PATCH" to allowed methods for application/interview updates
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     credentials: true,
   })
@@ -50,14 +70,16 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// --- 2. ROUTE REGISTRATION ---
+/* =============================
+   ROUTES
+============================= */
+
 import jobseekerRoutes from "./routes/jobseekerRoutes.js";
 import employerRoutes from "./routes/employerRoutes.js";
 import jobRoutes from "./routes/jobRoutes.js";
 import applicationRoutes from "./routes/applicationRoutes.js";
 import chatRoutes from "./routes/chatRoutes.js";
-// ✅ FIXED: Corrected path to include /routes/
-import notificationRoutes from "./routes/notificationRoutes.js"; 
+import notificationRoutes from "./routes/notificationRoutes.js";
 import interviewRoutes from "./routes/interviewRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import reportRoutes from "./routes/reportRoutes.js";
@@ -74,23 +96,50 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/test", testRoutes);
 
-app.get("/api/health", (req, res) => res.json({ status: "ok", timestamp: new Date() }));
+/* =============================
+   ROOT & HEALTH ROUTES
+============================= */
+
+app.get("/", (req, res) => {
+  res.json({
+    message: "JOBCONNECT API is live 🚀",
+    status: "Healthy",
+    timestamp: new Date(),
+  });
+});
+
+app.get("/api/health", (req, res) =>
+  res.json({ status: "ok", timestamp: new Date() })
+);
 
 import { notFound, errorHandler } from "./middleware/errorMiddleware.js";
+
+/* =============================
+   SERVER START
+============================= */
 
 const startServer = async () => {
   try {
     await connectDB();
+
     const server = http.createServer(app);
 
-    // --- 3. SOCKET.IO INITIALIZATION ---
+    /* =============================
+       SOCKET.IO
+    ============================= */
+
     const io = new Server(server, {
       cors: {
-        origin: allowedOrigins,
+        origin: (origin, callback) => {
+          if (!origin || origin.includes("vercel.app") || origin.includes("localhost")) {
+            return callback(null, true);
+          }
+          return callback(new Error("Socket CORS blocked"));
+        },
         methods: ["GET", "POST"],
         credentials: true,
       },
-      transports: ["websocket", "polling"], 
+      transports: ["websocket", "polling"],
     });
 
     app.set("socketio", io);
@@ -108,17 +157,17 @@ const startServer = async () => {
       socket.on("send_message", async (data) => {
         try {
           const { senderId, receiverId, message, senderType } = data;
+          if (!senderId || !receiverId || !message) return;
 
-          if (!senderId || !receiverId || !message) {
-            return socket.emit("error", { message: "Incomplete message data" });
-          }
-          
           const JobSeeker = mongoose.model("JobSeeker");
           const Employer = mongoose.model("Employer");
 
           let senderData, receiverData, receiverType;
 
-          const normalizedSenderType = (senderType?.toLowerCase() === 'jobseeker') ? 'JobSeeker' : 'Employer';
+          const normalizedSenderType =
+            senderType?.toLowerCase() === "jobseeker"
+              ? "JobSeeker"
+              : "Employer";
 
           if (normalizedSenderType === "JobSeeker") {
             senderData = await JobSeeker.findById(senderId).select("name avatar");
@@ -128,6 +177,7 @@ const startServer = async () => {
           }
 
           const empCheck = await Employer.findById(receiverId).select("companyName avatar");
+
           if (empCheck) {
             receiverData = { name: empCheck.companyName, avatar: empCheck.avatar };
             receiverType = "Employer";
@@ -147,37 +197,29 @@ const startServer = async () => {
             receiverAvatar: receiverData?.avatar || null,
             receiverModel: receiverType,
             message: message.trim(),
-            timestamp: new Date()
+            timestamp: new Date(),
           });
 
           const savedMsg = await newChat.save();
 
-          const targetRoom = receiverId.toString().trim();
-          const senderRoom = senderId.toString().trim();
-          
-          io.to(targetRoom).emit("receive_message", savedMsg);
-          io.to(senderRoom).emit("receive_message", savedMsg); 
-
-          io.to(targetRoom).emit("new_conversation_notification", { 
-            from: senderData?.name,
-            message: message.substring(0, 30) + "..."
-          });
+          io.to(receiverId.toString().trim()).emit("receive_message", savedMsg);
+          io.to(senderId.toString().trim()).emit("receive_message", savedMsg);
 
         } catch (err) {
           console.error("❌ Socket Error:", err);
-          socket.emit("error", { message: "Messaging failed" });
         }
       });
 
-      socket.on("disconnect", () => {
-        console.log(`❌ Disconnected: ${socket.id}`);
-      });
+      socket.on("disconnect", () =>
+        console.log(`❌ Disconnected: ${socket.id}`)
+      );
     });
 
     app.use(notFound);
     app.use(errorHandler);
 
     const PORT = process.env.PORT || 5000;
+
     server.listen(PORT, "0.0.0.0", () => {
       console.log(`🚀 Server running on port ${PORT}`);
     });
