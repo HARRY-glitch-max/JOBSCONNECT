@@ -40,7 +40,7 @@ if (process.env.NODE_ENV === "development") {
 const allowedOrigins = [
   "http://localhost:5173",
   "http://127.0.0.1:5173",
-  "https://jobsconnect-lov5.vercel.app",
+  "https://jobsconnect-b7uh.vercel.app/",
 ];
 
 app.use(
