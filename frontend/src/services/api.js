@@ -6,7 +6,7 @@ import axios from "axios";
 // =====================================
 const API = axios.create({
   baseURL: import.meta.env.PROD
-    ? "https://https://jobsconnect-4.onrender.com/api" // ✅ Production (Render)
+    ? "https://jobsconnect-4.onrender.com/api" // ✅ Production (Render)
     : "http://localhost:5000/api",             // ✅ Local development
   withCredentials: true,
 });
