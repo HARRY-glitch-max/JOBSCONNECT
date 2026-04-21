@@ -2,10 +2,10 @@ import axios from 'axios';
 
 /**
  * Axios instance for JobConnect / HireFlow.
- * Updated to dynamically use the Render backend in production.
+ * Automatically switches between Localhost and Render.
  */
 const apiClient = axios.create({
-  // ✅ FIX: Use VITE_API_URL from Vercel env variables, or fallback to localhost
+  // ✅ THE FIX: Dynamically switch based on environment
   baseURL: import.meta.env.VITE_API_URL 
     ? `https://jobsconnect-4.onrender.com/api` 
     : 'http://localhost:5000/api', 
@@ -13,7 +13,6 @@ const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  // ✅ IMPORTANT: Allows cookies/sessions to work across Vercel and Render
   withCredentials: true 
 });
 
@@ -27,8 +26,6 @@ apiClient.interceptors.request.use(
     if (storageData) {
       try {
         const parsedData = JSON.parse(storageData);
-        
-        // Extracting token from various possible structures
         const token = parsedData.token || parsedData.data?.token || parsedData.user?.token;
         
         if (token) {
@@ -39,7 +36,7 @@ apiClient.interceptors.request.use(
       }
     }
 
-    // ✅ Log requests in development to verify absolute URLs
+    // ✅ Better logging for debugging connectivity
     if (import.meta.env.MODE === 'development') {
       console.log(`🚀 Requesting: ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`);
     }
@@ -58,7 +55,6 @@ apiClient.interceptors.response.use(
     const { response, config } = error;
 
     if (response) {
-      // --- 401: Unauthorized / Token Expired ---
       if (response.status === 401) {
         if (!window.location.pathname.includes('/login')) {
           console.warn("Session expired. Clearing local state...");
@@ -67,29 +63,15 @@ apiClient.interceptors.response.use(
         }
       }
 
-      // --- 405: Method Not Allowed ---
-      // ✅ Logged specifically to help debug Vercel routing issues
       if (response.status === 405) {
-        console.error(`❌ Method Not Allowed [405]: Ensure ${config.url} is a POST route on the backend and VITE_API_URL is correct.`);
+        console.error(`❌ Method Not Allowed [405]: Request hit ${config.baseURL}${config.url}. Check if the URL is correct.`);
       }
 
-      // --- 403: Forbidden ---
-      if (response.status === 403) {
-        const message = response.data?.message || "Access denied.";
-        console.error(`🛡️ [403]: ${message}`);
-      }
-
-      // --- 404: Missing Endpoint ---
       if (response.status === 404) {
-        console.error(`🔍 [404]: ${config.url} not found. Check Render logs.`);
-      }
-
-      // --- 500: Server Crash ---
-      if (response.status >= 500) {
-        console.error("🔥 Server Error: Check Render dashboard for logs.");
+        console.error(`🔍 [404]: ${config.url} not found on the server.`);
       }
     } else if (error.request) {
-      console.error("🔌 Connectivity Error: Is the Render server spinning up?");
+      console.error("🔌 Connectivity Error: No response received. Check your internet or if the server is awake.");
     }
 
     return Promise.reject(error);
