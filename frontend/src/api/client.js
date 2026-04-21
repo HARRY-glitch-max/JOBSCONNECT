@@ -7,7 +7,7 @@ import axios from 'axios';
 const apiClient = axios.create({
   // ✅ FIX: Use VITE_API_URL from Vercel env variables, or fallback to localhost
   baseURL: import.meta.env.VITE_API_URL 
-    ? `${import.meta.env.VITE_API_URL}/api` 
+    ? `https://jobsconnect-4.onrender.com/api` 
     : 'http://localhost:5000/api', 
   timeout: 15000, 
   headers: {
