@@ -1,5 +1,5 @@
 import { useState, useContext } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import Input from "../components/ui/input";
 import Button from "../components/ui/button";
 import { loginJobseeker } from "../services/api"; 
@@ -89,6 +89,17 @@ export default function JobseekerLogin() {
           autoComplete="current-password"
           required
         />
+        
+        {/* Forgot Password Link */}
+        <div className="text-right">
+          <Link 
+            to="/forgot-password?role=jobseeker"
+            className="text-sm text-blue-600 hover:text-blue-800 hover:underline font-medium transition-colors"
+          >
+            Forgot Password?
+          </Link>
+        </div>
+        
         <Button 
           type="submit" 
           className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl transition-all shadow-lg shadow-blue-100" 
@@ -97,6 +108,21 @@ export default function JobseekerLogin() {
           {loading ? "Verifying..." : "Sign In"}
         </Button>
       </form>
+      
+      {/* Sign Up Link */}
+      <div className="mt-6 text-center">
+        <p className="text-sm text-gray-600">
+          Don't have an account?{' '}
+          <Link 
+            to="/register" 
+            className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
+          >
+            Sign up
+          </Link>
+        </p>
+      </div>
     </div>
   );
 }
+
+

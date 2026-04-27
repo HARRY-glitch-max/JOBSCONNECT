@@ -4,6 +4,8 @@ import Interview from "../models/Interview.js";
 import Application from "../models/Application.js";
 import generateToken from "../utils/generateToken.js";
 import axios from "axios";
+import crypto from "crypto";
+import { sendPasswordResetEmail, sendPasswordChangedEmail } from "../utils/sendEmail.js";
 
 // =======================
 // Auth & Identity
@@ -87,7 +89,7 @@ export const loginEmployer = async (req, res) => {
 };
 
 // =======================
-// Profile Management (NEW)
+// Profile Management
 // =======================
 
 /**
@@ -95,7 +97,7 @@ export const loginEmployer = async (req, res) => {
  */
 export const getEmployerProfile = async (req, res) => {
   try {
-    const employer = await Employer.findById(req.user._id).select("-password");
+    const employer = await Employer.findById(req.user._id).select("-password -resetPasswordToken -resetPasswordExpire");
     if (!employer) return res.status(404).json({ message: "Employer not found" });
     res.json(employer);
   } catch (err) {
@@ -133,11 +135,192 @@ export const updateEmployerProfile = async (req, res) => {
     // Return sanitized object
     const result = updatedEmployer.toObject();
     delete result.password;
+    delete result.resetPasswordToken;
+    delete result.resetPasswordExpire;
     
     res.json(result);
   } catch (err) {
     console.error("Profile Update Error:", err);
     res.status(500).json({ message: "Failed to update profile." });
+  }
+};
+
+// =======================
+// Password Management
+// =======================
+
+/**
+ * @desc Change Password (while logged in)
+ */
+export const changeEmployerPassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ 
+        message: "Please provide both current password and new password." 
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ 
+        message: "New password must be at least 6 characters long." 
+      });
+    }
+
+    const employer = await Employer.findById(req.user._id);
+    if (!employer) {
+      return res.status(404).json({ message: "Employer not found." });
+    }
+
+    // Verify current password
+    const isMatch = await employer.matchPassword(currentPassword);
+    if (!isMatch) {
+      return res.status(401).json({ message: "Current password is incorrect." });
+    }
+
+    // Set and save new password
+    employer.password = newPassword;
+    await employer.save();
+
+    // Send confirmation email
+    sendPasswordChangedEmail({
+      email: employer.contactInformation.email,
+      name: employer.companyName,
+    }).catch(err => console.error("Failed to send password change confirmation:", err));
+
+    res.json({ 
+      message: "Password changed successfully. Please log in again with your new password.",
+      shouldLogout: true
+    });
+  } catch (error) {
+    console.error("CHANGE PASSWORD ERROR:", error);
+    res.status(500).json({ message: "Server error changing password." });
+  }
+};
+
+/**
+ * @desc Forgot Password - Send Reset Link via Email
+ */
+export const forgotEmployerPassword = async (req, res) => {
+  try {
+    let { email } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({ message: "Please provide an email address." });
+    }
+
+    email = email.toLowerCase();
+    const employer = await Employer.findOne({ "contactInformation.email": email });
+    
+    if (!employer) {
+      // For security, don't reveal that email doesn't exist
+      return res.status(200).json({ 
+        message: "If an account with that email exists, a password reset link has been sent." 
+      });
+    }
+
+    // Generate reset token
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    
+    // Hash token and save to database
+    employer.resetPasswordToken = crypto
+      .createHash("sha256")
+      .update(resetToken)
+      .digest("hex");
+    
+    employer.resetPasswordExpire = Date.now() + 10 * 60 * 1000; // 10 minutes
+    
+    await employer.save({ validateBeforeSave: false });
+
+    // Create reset URL - Using frontend URL for better UX
+    const frontendUrl = process.env.FRONTEND_URL || `${req.protocol}://${req.get("host")}`;
+    const resetUrl = `${frontendUrl}/reset-password/${resetToken}?role=employer`;
+    
+    try {
+      // Use the dedicated password reset email function
+      await sendPasswordResetEmail({
+        email: employer.contactInformation.email,
+        name: employer.companyName,
+        resetUrl: resetUrl,
+      });
+
+      res.status(200).json({ 
+        message: "Password reset link sent to your email address." 
+      });
+    } catch (emailError) {
+      console.error("EMAIL SEND ERROR:", emailError);
+      
+      // Reset token fields if email fails
+      employer.resetPasswordToken = undefined;
+      employer.resetPasswordExpire = undefined;
+      await employer.save({ validateBeforeSave: false });
+      
+      res.status(500).json({ 
+        message: "Failed to send reset email. Please try again later." 
+      });
+    }
+  } catch (error) {
+    console.error("FORGOT PASSWORD ERROR:", error);
+    res.status(500).json({ message: "Server error processing forgot password request." });
+  }
+};
+
+/**
+ * @desc Reset Password - Using Token from Email
+ */
+export const resetEmployerPassword = async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { password } = req.body;
+
+    if (!password) {
+      return res.status(400).json({ message: "Please provide a new password." });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ 
+        message: "Password must be at least 6 characters long." 
+      });
+    }
+
+    // Hash the token from URL to compare with stored hash
+    const hashedToken = crypto
+      .createHash("sha256")
+      .update(token)
+      .digest("hex");
+
+    // Find employer with valid token
+    const employer = await Employer.findOne({
+      resetPasswordToken: hashedToken,
+      resetPasswordExpire: { $gt: Date.now() } // Token hasn't expired
+    });
+
+    if (!employer) {
+      return res.status(400).json({ 
+        message: "Invalid or expired reset token. Please request a new password reset." 
+      });
+    }
+
+    // Set new password
+    employer.password = password;
+    employer.resetPasswordToken = undefined;
+    employer.resetPasswordExpire = undefined;
+    
+    await employer.save();
+
+    // Send confirmation email
+    sendPasswordChangedEmail({
+      email: employer.contactInformation.email,
+      name: employer.companyName,
+    }).catch(err => console.error("Failed to send password change confirmation:", err));
+
+    res.json({ 
+      message: "Password reset successful. You can now log in with your new password." 
+    });
+  } catch (error) {
+    console.error("RESET PASSWORD ERROR:", error);
+    res.status(500).json({ message: "Server error resetting password." });
   }
 };
 
@@ -176,7 +359,7 @@ export const getEmployerReports = async (req, res) => {
 
 export const getEmployers = async (req, res) => {
   try {
-    const employers = await Employer.find().select("-password");
+    const employers = await Employer.find().select("-password -resetPasswordToken -resetPasswordExpire");
     res.json(employers);
   } catch (err) {
     res.status(500).json({ message: "Error fetching employers." });
@@ -185,7 +368,7 @@ export const getEmployers = async (req, res) => {
 
 export const getEmployerById = async (req, res) => {
   try {
-    const employer = await Employer.findById(req.params.id).select("-password");
+    const employer = await Employer.findById(req.params.id).select("-password -resetPasswordToken -resetPasswordExpire");
     if (!employer) return res.status(404).json({ message: "Not found" });
     res.json(employer);
   } catch (err) {
@@ -196,7 +379,11 @@ export const getEmployerById = async (req, res) => {
 // Keep updateEmployer for Admin use (updates by URL ID)
 export const updateEmployer = async (req, res) => {
   try {
-    const employer = await Employer.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const employer = await Employer.findByIdAndUpdate(
+      req.params.id, 
+      req.body, 
+      { new: true }
+    ).select("-password -resetPasswordToken -resetPasswordExpire");
     res.json(employer);
   } catch (err) {
     res.status(500).json({ message: "Update error." });

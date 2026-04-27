@@ -33,6 +33,16 @@ const jobseekerSchema = new mongoose.Schema(
       enum: ["jobseeker"],
       default: "jobseeker",
     },
+
+    // ✅ Password Reset Fields
+    resetPasswordToken: { 
+      type: String,
+      select: false // Don't return by default in queries
+    },
+    resetPasswordExpire: { 
+      type: Date,
+      select: false // Don't return by default in queries
+    }
   },
   { timestamps: true }
 );
@@ -40,8 +50,14 @@ const jobseekerSchema = new mongoose.Schema(
 // Hash password before saving
 jobseekerSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
+  
+  try {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+    next();
+  } catch (error) {
+    next(error);
+  }
 });
 
 // Add matchPassword method

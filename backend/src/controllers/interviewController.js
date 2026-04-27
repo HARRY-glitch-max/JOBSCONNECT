@@ -2,7 +2,7 @@ import Interview from "../models/Interview.js";
 import Application from "../models/Application.js";
 import Notification from "../models/Notification.js";
 import mongoose from "mongoose";
-import { notifyJobseeker } from "../utils/notifyJobseeker.js";
+import { notifyJobseeker } from "../utils/sendEmail.js";
 
 /**
  * @desc    Employer books interview slot for a shortlisted candidate

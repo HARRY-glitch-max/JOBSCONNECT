@@ -3,7 +3,7 @@ import Job from "../models/Job.js";
 import Notification from "../models/Notification.js";
 import User from "../models/Jobseeker.js"; 
 import Interview from "../models/Interview.js";
-import { notifyJobseeker } from "../utils/notifyJobseeker.js";
+import { notifyJobseeker } from "../utils/sendEmail.js";
 
 // =======================
 // Helper: Notify all jobseekers

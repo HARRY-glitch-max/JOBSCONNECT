@@ -1,6 +1,6 @@
 // src/pages/AdminLogin.jsx
 import { useState, useContext } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import Input from "../components/ui/input";
 import Button from "../components/ui/button";
 import { loginAdmin } from "../services/api"; 
@@ -52,10 +52,10 @@ export default function AdminLogin() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
-      <div className="max-w-md w-full bg-white shadow-xl shadow-blue-500/5 p-8 rounded-[2rem] border border-slate-100">
+      <div className="max-w-md w-full bg-white shadow-xl shadow-purple-500/5 p-8 rounded-[2rem] border border-slate-100">
         <div className="text-center mb-8">
-          <h2 className="text-3xl font-black text-slate-900 tracking-tight">Admin Portal</h2>
-          <p className="text-slate-500 font-medium mt-2">Enter your credentials to manage HireFlow</p>
+          <h2 className="text-3xl font-black text-purple-600 tracking-tight">Admin Portal</h2>
+          <p className="text-slate-500 font-medium mt-2">Enter your credentials to manage JobConnect</p>
         </div>
 
         {error && (
@@ -72,10 +72,10 @@ export default function AdminLogin() {
               name="email"
               value={formData.email}
               onChange={handleChange}
-              placeholder="admin@hireflow.com"
+              placeholder="admin@jobconnect.com"
               autoComplete="email"
               required
-              className="rounded-xl border-slate-200 focus:border-blue-500 h-12"
+              className="rounded-xl border-slate-200 focus:border-purple-500 h-12"
             />
           </div>
 
@@ -89,18 +89,38 @@ export default function AdminLogin() {
               placeholder="••••••••"
               autoComplete="current-password"
               required
-              className="rounded-xl border-slate-200 focus:border-blue-500 h-12"
+              className="rounded-xl border-slate-200 focus:border-purple-500 h-12"
             />
+          </div>
+          
+          {/* Forgot Password Link */}
+          <div className="text-right">
+            <Link 
+              to="/forgot-password?role=admin"
+              className="text-sm text-purple-600 hover:text-purple-800 hover:underline font-medium transition-colors"
+            >
+              Forgot Password?
+            </Link>
           </div>
 
           <Button 
             type="submit" 
-            className="w-full h-12 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold transition-all shadow-lg shadow-blue-200 mt-4" 
+            className="w-full h-12 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold transition-all shadow-lg shadow-purple-200 mt-4" 
             disabled={loading}
           >
             {loading ? "Verifying..." : "Sign In to Dashboard"}
           </Button>
         </form>
+        
+        {/* Back to Home Link */}
+        <div className="mt-6 text-center">
+          <Link 
+            to="/" 
+            className="text-sm text-gray-600 hover:text-gray-800 hover:underline transition-colors"
+          >
+            ← Back to Home
+          </Link>
+        </div>
       </div>
     </div>
   );

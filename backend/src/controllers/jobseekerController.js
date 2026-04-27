@@ -1,7 +1,8 @@
 import User from "../models/Jobseeker.js";
 import generateToken from "../utils/generateToken.js";
-import { notifyJobseeker } from "../utils/notifyJobseeker.js";
+import { notifyJobseeker, sendPasswordResetEmail, sendPasswordChangedEmail } from "../utils/sendEmail.js";
 import axios from "axios";
+import crypto from "crypto";
 
 // ==========================================
 // 1. AUTHENTICATION
@@ -16,7 +17,7 @@ export const registerUser = async (req, res) => {
     }
 
     if (nationality.toLowerCase() !== 'kenyan') {
-      return res.status(403).json({ message: "HireFlow is exclusive to Kenyan nationals." });
+      return res.status(403).json({ message: "JobConnect is exclusive to Kenyan nationals." });
     }
 
     if (process.env.NODE_ENV === 'production') {
@@ -37,11 +38,11 @@ export const registerUser = async (req, res) => {
 
     const user = await User.create({ name, email, password, nationality: "Kenyan" });
 
-    // 🚀 HireFlow Welcome Email
+    // 🚀 JobConnect Welcome Email
     await notifyJobseeker({
       email: user.email,
       name: user.name,
-      subject: "Welcome to HireFlow!",
+      subject: "Welcome to JobConnect!",
       message: "Your professional account is ready. Complete your profile to start receiving job matches tailored to your skills.",
       ctaText: "Complete My Profile",
       ctaLink: "http://localhost:5173/profile" 
@@ -91,7 +92,7 @@ export const loginUser = async (req, res) => {
 export const getUserProfile = async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
-    const user = await User.findById(userId).select("-password");
+    const user = await User.findById(userId).select("-password -resetPasswordToken -resetPasswordExpire");
     if (!user) return res.status(404).json({ message: "User not found." });
     res.json(user);
   } catch (err) {
@@ -136,29 +137,210 @@ export const updateUserProfile = async (req, res) => {
 };
 
 // ==========================================
-// 3. ADMINISTRATIVE / COLLECTION
+// 3. PASSWORD MANAGEMENT
+// ==========================================
+
+/**
+ * @desc Change Password (while logged in)
+ */
+export const changeUserPassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ 
+        message: "Please provide both current password and new password." 
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ 
+        message: "New password must be at least 6 characters long." 
+      });
+    }
+
+    const userId = req.user._id || req.user.id;
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    // Verify current password
+    const isMatch = await user.matchPassword(currentPassword);
+    if (!isMatch) {
+      return res.status(401).json({ message: "Current password is incorrect." });
+    }
+
+    // Set and save new password
+    user.password = newPassword;
+    await user.save();
+
+    // Send confirmation email
+    sendPasswordChangedEmail({
+      email: user.email,
+      name: user.name,
+    }).catch(err => console.error("Failed to send password change confirmation:", err));
+
+    res.json({ 
+      message: "Password changed successfully. Please log in again with your new password.",
+      shouldLogout: true
+    });
+  } catch (error) {
+    console.error("CHANGE PASSWORD ERROR:", error);
+    res.status(500).json({ message: "Server error changing password." });
+  }
+};
+
+/**
+ * @desc Forgot Password - Send Reset Link via Email
+ */
+export const forgotUserPassword = async (req, res) => {
+  try {
+    let { email } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({ message: "Please provide an email address." });
+    }
+
+    email = email.toLowerCase();
+    const user = await User.findOne({ email });
+    
+    if (!user) {
+      // For security, don't reveal that email doesn't exist
+      return res.status(200).json({ 
+        message: "If an account with that email exists, a password reset link has been sent." 
+      });
+    }
+
+    // Generate reset token
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    
+    // Hash token and save to database
+    user.resetPasswordToken = crypto
+      .createHash("sha256")
+      .update(resetToken)
+      .digest("hex");
+    
+    user.resetPasswordExpire = Date.now() + 10 * 60 * 1000; // 10 minutes
+    
+    await user.save({ validateBeforeSave: false });
+
+    // Create reset URL - Using frontend URL for better UX
+    const frontendUrl = process.env.FRONTEND_URL || `${req.protocol}://${req.get("host")}`;
+    const resetUrl = `${frontendUrl}/reset-password/${resetToken}?role=jobseeker`;
+    
+    try {
+      // Use the dedicated password reset email function
+      await sendPasswordResetEmail({
+        email: user.email,
+        name: user.name,
+        resetUrl: resetUrl,
+      });
+
+      res.status(200).json({ 
+        message: "Password reset link sent to your email address." 
+      });
+    } catch (emailError) {
+      console.error("EMAIL SEND ERROR:", emailError);
+      
+      // Reset token fields if email fails
+      user.resetPasswordToken = undefined;
+      user.resetPasswordExpire = undefined;
+      await user.save({ validateBeforeSave: false });
+      
+      res.status(500).json({ 
+        message: "Failed to send reset email. Please try again later." 
+      });
+    }
+  } catch (error) {
+    console.error("FORGOT PASSWORD ERROR:", error);
+    res.status(500).json({ message: "Server error processing forgot password request." });
+  }
+};
+
+/**
+ * @desc Reset Password - Using Token from Email
+ */
+export const resetUserPassword = async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { password } = req.body;
+
+    if (!password) {
+      return res.status(400).json({ message: "Please provide a new password." });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ 
+        message: "Password must be at least 6 characters long." 
+      });
+    }
+
+    // Hash the token from URL to compare with stored hash
+    const hashedToken = crypto
+      .createHash("sha256")
+      .update(token)
+      .digest("hex");
+
+    // Find user with valid token
+    const user = await User.findOne({
+      resetPasswordToken: hashedToken,
+      resetPasswordExpire: { $gt: Date.now() }
+    }).select("+resetPasswordToken +resetPasswordExpire");
+
+    if (!user) {
+      return res.status(400).json({ 
+        message: "Invalid or expired reset token. Please request a new password reset." 
+      });
+    }
+
+    // Set new password
+    user.password = password;
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpire = undefined;
+    
+    await user.save();
+
+    // Send confirmation email
+    sendPasswordChangedEmail({
+      email: user.email,
+      name: user.name,
+    }).catch(err => console.error("Failed to send password change confirmation:", err));
+
+    res.json({ 
+      message: "Password reset successful. You can now log in with your new password." 
+    });
+  } catch (error) {
+    console.error("RESET PASSWORD ERROR:", error);
+    res.status(500).json({ message: "Server error resetting password." });
+  }
+};
+
+// ==========================================
+// 4. ADMINISTRATIVE / COLLECTION
 // ==========================================
 
 export const getUsers = async (req, res) => {
   try {
-    const users = await User.find().select("-password");
+    const users = await User.find().select("-password -resetPasswordToken -resetPasswordExpire");
     res.json(users);
   } catch (err) {
+    console.error("GET USERS ERROR:", err);
     res.status(500).json({ message: "Server error fetching users." });
   }
 };
 
 export const getUserById = async (req, res) => {
   try {
-    const user = await User.findById(req.params.id).select("-password");
+    const user = await User.findById(req.params.id).select("-password -resetPasswordToken -resetPasswordExpire");
     if (!user) return res.status(404).json({ message: "User not found." });
     res.json(user);
   } catch (err) {
+    console.error("GET USER BY ID ERROR:", err);
     res.status(500).json({ message: "Server error." });
   }
 };
 
-// RESTORED: Admin-level user update
 export const updateUser = async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
@@ -168,10 +350,15 @@ export const updateUser = async (req, res) => {
     if (req.body.email) user.email = req.body.email.toLowerCase();
 
     const updatedUser = await user.save();
+    const sanitizedUser = updatedUser.toObject();
+    delete sanitizedUser.password;
+    delete sanitizedUser.resetPasswordToken;
+    delete sanitizedUser.resetPasswordExpire;
+    
     res.json({
       success: true,
       message: "User updated successfully",
-      user: updatedUser
+      user: sanitizedUser
     });
   } catch (err) {
     console.error("ADMIN UPDATE ERROR:", err);
@@ -199,7 +386,7 @@ export const notifyJobseekerById = async (req, res) => {
     await notifyJobseeker({
       email: user.email,
       name: user.name,
-      subject: subject || "Update on your HireFlow Account",
+      subject: subject || "Update on your JobConnect Account",
       message: message || "You have a new notification waiting in your dashboard.",
       ctaText: ctaText || "View Dashboard",
       ctaLink: ctaLink || "http://localhost:5173/dashboard"

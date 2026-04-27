@@ -16,6 +16,16 @@ import Jobs from "./pages/Jobs";
 import ApplyJob from "./pages/ApplyJob"; 
 import ChatPage from "./pages/ChatPage";
 
+// Password Management Pages
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
+import ChangePassword from "./pages/ChangePassword";
+
+// Profile Pages
+import JobseekerProfile from "./pages/JobseekerProfile";
+import EmployerProfile from "./pages/EmployerProfile";
+import AdminProfile from "./pages/AdminProfile";
+
 // Dashboards & Auth
 import JobseekerLogin from "./pages/JobseekerLogin";
 import JobseekerDashboard from "./pages/JobseekerDashboard";
@@ -55,13 +65,20 @@ const AppContent = () => {
 
   useEffect(() => {
     window.scrollTo(0, 0);
-  }, [location.pathname]);
+    // Debug logging
+    console.log("Current path:", location.pathname);
+    console.log("User role:", role);
+    console.log("Is authenticated:", !!user);
+  }, [location.pathname, user, role]);
 
   const hideNavbar =
     location.pathname.startsWith("/employer/dashboard") ||
     location.pathname.startsWith("/admin/dashboard") ||
     location.pathname.startsWith("/jobseeker/dashboard") ||
-    location.pathname.startsWith("/apply");
+    location.pathname.startsWith("/apply") ||
+    location.pathname.startsWith("/reset-password") ||
+    location.pathname.startsWith("/change-password") ||
+    location.pathname.startsWith("/forgot-password");
 
   if (loading) {
     return (
@@ -74,6 +91,35 @@ const AppContent = () => {
   const isAuthenticated = !!user;
   const userRole = role?.toLowerCase();
 
+  // Protect change password route
+  const ProtectedChangePassword = () => {
+    if (!isAuthenticated) {
+      if (userRole === "employer") return <Navigate to="/employer/login" replace />;
+      if (userRole === "admin") return <Navigate to="/admin/login" replace />;
+      return <Navigate to="/jobseeker/login" replace />;
+    }
+    return <ChangePassword />;
+  };
+
+  // Protect profile routes
+  const ProtectedJobseekerProfile = () => {
+    if (!isAuthenticated) return <Navigate to="/jobseeker/login" replace />;
+    if (userRole !== "jobseeker") return <Navigate to="/" replace />;
+    return <JobseekerProfile />;
+  };
+
+  const ProtectedEmployerProfile = () => {
+    if (!isAuthenticated) return <Navigate to="/employer/login" replace />;
+    if (userRole !== "employer") return <Navigate to="/" replace />;
+    return <EmployerProfile />;
+  };
+
+  const ProtectedAdminProfile = () => {
+    if (!isAuthenticated) return <Navigate to="/admin/login" replace />;
+    if (userRole !== "admin") return <Navigate to="/" replace />;
+    return <AdminProfile />;
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 transition-colors duration-300">
       <GlobalInputStyles />
@@ -81,26 +127,39 @@ const AppContent = () => {
 
       <main>
         <Routes>
+          {/* Public Routes */}
           <Route path="/" element={<Home />} />
           <Route path="/jobs" element={<Jobs />} />
 
-          {/* REGISTRATION */}
+          {/* Password Management Routes - Public */}
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password/:token" element={<ResetPassword />} />
+          
+          {/* Change Password - Protected */}
+          <Route path="/change-password" element={<ProtectedChangePassword />} />
+
+          {/* Registration Routes - Public */}
           <Route path="/jobseeker/register" element={<JobseekerRegister />} />
           <Route path="/employer/register" element={<EmployerRegister />} />
           <Route path="/admin/register" element={<AdminRegister />} />
 
-          {/* APPLICATION */}
+          {/* Authentication Routes - Public (No redirects here) */}
+          <Route path="/jobseeker/login" element={<JobseekerLogin />} />
+          <Route path="/employer/login" element={<EmployerLogin />} />
+          <Route path="/admin/login" element={<AdminLogin />} />
+
+          {/* Profile Routes - Protected */}
+          <Route path="/jobseeker/profile" element={<ProtectedJobseekerProfile />} />
+          <Route path="/employer/profile" element={<ProtectedEmployerProfile />} />
+          <Route path="/admin/profile" element={<ProtectedAdminProfile />} />
+
+          {/* Application Route - Protected */}
           <Route 
             path="/apply/:jobId" 
             element={isAuthenticated && userRole === "jobseeker" ? <ApplyJob /> : <Navigate to="/jobseeker/login" replace />} 
           />
 
-          {/* AUTH */}
-          <Route path="/jobseeker/login" element={!isAuthenticated ? <JobseekerLogin /> : <Navigate to="/jobseeker/dashboard" replace />} />
-          <Route path="/employer/login" element={!isAuthenticated ? <EmployerLogin /> : <Navigate to="/employer/dashboard" replace />} />
-          <Route path="/admin/login" element={!isAuthenticated ? <AdminLogin /> : <Navigate to="/admin/dashboard" replace />} />
-
-          {/* PROTECTED DASHBOARDS */}
+          {/* Protected Dashboards */}
           <Route
             path="/jobseeker/dashboard/*"
             element={isAuthenticated && userRole === "jobseeker" ? <JobseekerDashboard /> : <Navigate to="/jobseeker/login" replace />}
@@ -114,19 +173,20 @@ const AppContent = () => {
             element={isAuthenticated && userRole === "admin" ? <AdminDashboard /> : <Navigate to="/admin/login" replace />}
           />
 
-          {/* GLOBAL CHAT ACCESS */}
+          {/* Global Chat Access - Protected */}
           <Route 
             path="/chat/:id" 
             element={isAuthenticated ? <ChatPage /> : <Navigate to="/" replace />} 
           />
 
+          {/* 404 - Catch all - MUST be last */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
 
       {!hideNavbar && (
         <footer className="py-10 text-center text-slate-500 text-sm border-t border-slate-200 bg-white">
-          © 2026 HireFlow. All rights reserved.
+          © 2026 JobConnect. All rights reserved.
         </footer>
       )}
     </div>

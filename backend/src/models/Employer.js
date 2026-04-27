@@ -47,14 +47,30 @@ const employerSchema = new mongoose.Schema({
   ],
 
   // 📊 Metadata for report tracking
-  lastReportReceived: { type: Date }
+  lastReportReceived: { type: Date },
+
+  // ✅ Password Reset Fields
+  resetPasswordToken: { 
+    type: String,
+    select: false // Don't return by default in queries
+  },
+  resetPasswordExpire: { 
+    type: Date,
+    select: false // Don't return by default in queries
+  }
 }, { timestamps: true });
 
 // ✅ Hash password before saving
 employerSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
+  
+  try {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+    next();
+  } catch (error) {
+    next(error);
+  }
 });
 
 // ✅ Add matchPassword method

@@ -3,7 +3,7 @@ import Application from "../models/Application.js";
 import Notification from "../models/Notification.js";
 import Job from "../models/Job.js";
 import Jobseeker from "../models/Jobseeker.js"; 
-import { notifyJobseeker } from "../utils/notifyJobseeker.js";
+import { notifyJobseeker } from "../utils/sendEmail.js";
 import { v2 as cloudinary } from "cloudinary";
 
 cloudinary.config({

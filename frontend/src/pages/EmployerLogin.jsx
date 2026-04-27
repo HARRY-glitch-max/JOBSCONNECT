@@ -1,6 +1,6 @@
 // src/pages/EmployerLogin.jsx
 import { useState, useContext } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import Input from "../components/ui/input";
 import Button from "../components/ui/button";
 import { loginEmployer } from "../services/api"; // employer-specific login
@@ -38,32 +38,81 @@ export default function EmployerLogin() {
   };
 
   return (
-    <div className="max-w-md mx-auto mt-10 bg-white shadow-md p-6 rounded">
-      <h2 className="text-2xl font-bold text-blue-700 mb-4">Employer Login</h2>
-      {error && <p className="text-red-600 text-sm mb-4">{error}</p>}
-      <form onSubmit={handleSubmit} className="space-y-4">
+    <div className="max-w-md mx-auto mt-10 bg-white dark:bg-slate-900 shadow-md p-6 rounded-2xl border border-slate-100">
+      <div className="text-center mb-8">
+        <h2 className="text-3xl font-black text-blue-600 mb-2">Welcome Back</h2>
+        <p className="text-slate-500 font-medium">Employer Portal</p>
+      </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-100 text-red-600 text-sm p-3 rounded-xl mb-6 font-bold">
+          {error}
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-5">
         <Input
           type="email"
           name="email"
+          label="Email Address"
           value={formData.email}
           onChange={handleChange}
-          placeholder="Email"
-          autoComplete="email"             // ✅ valid autocomplete
+          placeholder="company@example.com"
+          autoComplete="email"
           required
         />
         <Input
           type="password"
           name="password"
+          label="Password"
           value={formData.password}
           onChange={handleChange}
-          placeholder="Password"
-          autoComplete="current-password"  // ✅ valid autocomplete
+          placeholder="••••••••"
+          autoComplete="current-password"
           required
         />
-        <Button type="submit" className="w-full" disabled={loading}>
-          {loading ? "Logging in..." : "Login"}
+        
+        {/* Forgot Password Link */}
+        <div className="text-right">
+          <Link 
+            to="/forgot-password?role=employer"
+            className="text-sm text-blue-600 hover:text-blue-800 hover:underline font-medium transition-colors"
+          >
+            Forgot Password?
+          </Link>
+        </div>
+        
+        <Button 
+          type="submit" 
+          className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl transition-all shadow-lg shadow-blue-100" 
+          disabled={loading}
+        >
+          {loading ? "Verifying..." : "Sign In"}
         </Button>
       </form>
+      
+      {/* Register Link */}
+      <div className="mt-6 text-center">
+        <p className="text-sm text-gray-600">
+          Don't have an employer account?{' '}
+          <Link 
+            to="/employer/register" 
+            className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
+          >
+            Register
+          </Link>
+        </p>
+      </div>
+      
+      {/* Back to Home Link */}
+      <div className="mt-4 text-center">
+        <Link 
+          to="/" 
+          className="text-sm text-gray-600 hover:text-gray-800 hover:underline"
+        >
+          ← Back to Home
+        </Link>
+      </div>
     </div>
   );
 }

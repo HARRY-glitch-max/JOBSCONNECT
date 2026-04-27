@@ -1,5 +1,5 @@
 import express from "express";
-import { notifyJobseeker } from "../utils/notifyJobseeker.js";
+import { notifyJobseeker } from "../utils/sendEmail.js";
 
 const router = express.Router();
 
