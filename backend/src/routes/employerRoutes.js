@@ -10,11 +10,12 @@ import {
   getEmployerInterviews,
   getEmployerReports,
   updateInterviewStatus,
-  getEmployerProfile,         // ✅ Self profile
-  updateEmployerProfile,      // ✅ Self profile update
-  changeEmployerPassword,     // ✅ Logged-in password change
-  forgotEmployerPassword,     // ✅ Fixed: Changed from 'forgotPassword' to 'forgotEmployerPassword'
-  resetEmployerPassword       // ✅ Fixed: Changed from 'resetPassword' to 'resetEmployerPassword'
+  getEmployerProfile,
+  updateEmployerProfile,
+  changeEmployerPassword,
+  forgotEmployerPassword,
+  resetEmployerPassword,
+  downloadReportAsPDF
 } from "../controllers/employerController.js";
 
 import { shortlistCandidate } from "../controllers/applicationController.js";
@@ -45,41 +46,52 @@ router.patch("/reset-password/:token", resetEmployerPassword);
 // ==========================================
 // 2. PERSONAL PROFILE ROUTES (MUST BE ABOVE /:id)
 // ==========================================
-// These handle the logged-in employer's own data via token
 router.get("/profile/me", protect, employerProtect, getEmployerProfile);
 router.put("/profile/me", protect, employerProtect, updateEmployerProfile);
-
-/**
- * @route   PUT /api/employers/change-password
- * @desc    Change password while logged in
- * @access  Private
- */
 router.put("/change-password", protect, employerProtect, changeEmployerPassword);
 
 // ==========================================
 // 3. PROTECTED EMPLOYER ACTIONS
 // ==========================================
-// Shortlist a candidate for a specific application
 router.put("/applications/:id/shortlist", protect, employerProtect, shortlistCandidate);
-
-// Update interview status/result (Pass/Fail)
 router.put("/interviews/:id/status", protect, employerProtect, updateInterviewStatus);
 
 // ==========================================
-// 4. ANALYTICS & SPECIFIC COLLECTIONS
+// 4. ANALYTICS & REPORTS ROUTES
 // ==========================================
-router.get("/reports", protect, employerProtect, getEmployerReports); 
+router.get("/reports", protect, employerProtect, getEmployerReports);
+router.get("/reports/download", protect, employerProtect, downloadReportAsPDF);
 router.get("/jobs", protect, employerProtect, getEmployerJobs);
 router.get("/interviews", protect, employerProtect, getEmployerInterviews);
 
 // ==========================================
-// 5. GENERAL & DYNAMIC ID ROUTES
+// 5. GENERAL COLLECTION ROUTE
 // ==========================================
 router.get("/", protect, getEmployers);
 
-// Dynamic routes (Keep these at the bottom)
+// ==========================================
+// 6. DYNAMIC ID ROUTES (MUST BE LAST)
+// ==========================================
 router.get("/:id", protect, getEmployerById);
 router.put("/:id", protect, updateEmployer);
 router.delete("/:id", protect, deleteEmployer);
+
+// ==========================================
+// 7. DEBUG ROUTE - Check all registered routes (remove in production)
+// ==========================================
+if (process.env.NODE_ENV !== 'production') {
+  router.get("/debug/routes", (req, res) => {
+    const routes = [];
+    router.stack.forEach(layer => {
+      if (layer.route) {
+        routes.push({
+          path: layer.route.path,
+          methods: Object.keys(layer.route.methods)
+        });
+      }
+    });
+    res.json({ routes });
+  });
+}
 
 export default router;

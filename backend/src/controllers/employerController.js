@@ -6,6 +6,7 @@ import generateToken from "../utils/generateToken.js";
 import axios from "axios";
 import crypto from "crypto";
 import { sendPasswordResetEmail, sendPasswordChangedEmail } from "../utils/sendEmail.js";
+import { generateHiringReportPDF } from "../utils/generatePDF.js";
 
 // =======================
 // Auth & Identity
@@ -325,9 +326,12 @@ export const resetEmployerPassword = async (req, res) => {
 };
 
 // =======================
-// Analytics
+// Analytics & Reports
 // =======================
 
+/**
+ * @desc Get employer analytics (JSON)
+ */
 export const getEmployerReports = async (req, res) => {
   try {
     const employerId = req.user?._id; 
@@ -335,21 +339,107 @@ export const getEmployerReports = async (req, res) => {
 
     const employerJobIds = await Job.find({ employerId }).distinct("_id");
 
-    const [totalJobs, activeJobs, totalApps, totalInterviews] = await Promise.all([
+    const [totalJobs, activeJobs, closedJobs, totalApps, shortlistedApps, hiredApps, rejectedApps, pendingApps, totalInterviews, completedInterviews, scheduledInterviews, cancelledInterviews] = await Promise.all([
       Job.countDocuments({ employerId }),
       Job.countDocuments({ employerId, status: "active" }),
+      Job.countDocuments({ employerId, status: "closed" }),
       Application.countDocuments({ jobId: { $in: employerJobIds } }),
-      Interview.countDocuments({ employerId })
+      Application.countDocuments({ jobId: { $in: employerJobIds }, status: "shortlisted" }),
+      Application.countDocuments({ jobId: { $in: employerJobIds }, status: "hired" }),
+      Application.countDocuments({ jobId: { $in: employerJobIds }, status: "rejected" }),
+      Application.countDocuments({ jobId: { $in: employerJobIds }, status: "pending" }),
+      Interview.countDocuments({ employerId }),
+      Interview.countDocuments({ employerId, status: "completed" }),
+      Interview.countDocuments({ employerId, status: "scheduled" }),
+      Interview.countDocuments({ employerId, status: "cancelled" })
     ]);
 
     res.status(200).json({
       success: true,
-      jobs: { total: totalJobs, active: activeJobs },
-      applications: { total: totalApps },
-      interviews: { total: totalInterviews },
+      jobs: { total: totalJobs, active: activeJobs, closed: closedJobs },
+      applications: {
+        total: totalApps,
+        shortlisted: shortlistedApps,
+        hired: hiredApps,
+        rejected: rejectedApps,
+        pending: pendingApps
+      },
+      interviews: {
+        total: totalInterviews,
+        completed: completedInterviews,
+        scheduled: scheduledInterviews,
+        cancelled: cancelledInterviews
+      }
     });
   } catch (err) {
+    console.error("Analytics Error:", err);
     res.status(500).json({ message: "Analytics error." });
+  }
+};
+
+/**
+ * @desc Download hiring report as PDF
+ */
+export const downloadReportAsPDF = async (req, res) => {
+  try {
+    const employerId = req.user?._id;
+    
+    if (!employerId) {
+      return res.status(401).json({ message: "Not authorized" });
+    }
+
+    const employer = await Employer.findById(employerId);
+    if (!employer) {
+      return res.status(404).json({ message: "Employer not found" });
+    }
+
+    const employerJobIds = await Job.find({ employerId }).distinct("_id");
+
+    const [totalJobs, activeJobs, closedJobs, totalApps, shortlistedApps, hiredApps, rejectedApps, pendingApps, totalInterviews, completedInterviews, scheduledInterviews, cancelledInterviews] = await Promise.all([
+      Job.countDocuments({ employerId }),
+      Job.countDocuments({ employerId, status: "active" }),
+      Job.countDocuments({ employerId, status: "closed" }),
+      Application.countDocuments({ jobId: { $in: employerJobIds } }),
+      Application.countDocuments({ jobId: { $in: employerJobIds }, status: "shortlisted" }),
+      Application.countDocuments({ jobId: { $in: employerJobIds }, status: "hired" }),
+      Application.countDocuments({ jobId: { $in: employerJobIds }, status: "rejected" }),
+      Application.countDocuments({ jobId: { $in: employerJobIds }, status: "pending" }),
+      Interview.countDocuments({ employerId }),
+      Interview.countDocuments({ employerId, status: "completed" }),
+      Interview.countDocuments({ employerId, status: "scheduled" }),
+      Interview.countDocuments({ employerId, status: "cancelled" })
+    ]);
+
+    const reportData = {
+      jobs: { total: totalJobs, active: activeJobs, closed: closedJobs },
+      applications: {
+        total: totalApps,
+        shortlisted: shortlistedApps,
+        hired: hiredApps,
+        rejected: rejectedApps,
+        pending: pendingApps
+      },
+      interviews: {
+        total: totalInterviews,
+        completed: completedInterviews,
+        scheduled: scheduledInterviews,
+        cancelled: cancelledInterviews
+      }
+    };
+
+    // Generate PDF
+    const pdfBuffer = await generateHiringReportPDF(reportData, employer.companyName);
+    
+    // Set response headers for PDF download
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=JobConnect_Hiring_Report_${employer.companyName.replace(/\s/g, '_')}_${Date.now()}.pdf`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    
+    res.send(pdfBuffer);
+    
+  } catch (err) {
+    console.error("PDF Download Error:", err);
+    res.status(500).json({ message: "Error generating PDF report", error: err.message });
   }
 };
 
